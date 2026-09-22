@@ -53,7 +53,7 @@ export const ProductsView: React.FC = () => {
   const [stockQuantity, setStockQuantity] = useState<number>(10);
   const [minStock, setMinStock] = useState<number>(5);
   const [warrantyDuration, setWarrantyDuration] = useState<number>(12);
-  const [warrantyUnit, setWarrantyUnit] = useState<'DAYS' | 'MONTHS' | 'YEARS'>('MONTHS');
+  const [warrantyUnit, setWarrantyUnit] = useState<'DAYS' | 'MONTHS' | 'YEARS' | string>('MONTHS');
 
   const categories = ['ALL', ...new Set(products.map((p) => p.category))];
 

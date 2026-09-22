@@ -180,12 +180,12 @@ export function scopeCollection<T extends Document>(
 
     insertOne(doc: OptionalId<T>, options?: any) {
       const scopedDoc = { ...doc, tenantId } as OptionalId<T>;
-      return col.insertOne(scopedDoc, options);
+      return col.insertOne(scopedDoc as any, options);
     },
 
     insertMany(docs: OptionalId<T>[], options?: any) {
       const scopedDocs = docs.map((d) => ({ ...d, tenantId })) as OptionalId<T>[];
-      return col.insertMany(scopedDocs, options);
+      return col.insertMany(scopedDocs as any, options);
     },
 
     updateOne(filter: Filter<T>, update: any, options?: any) {

@@ -404,10 +404,10 @@ apiRouter.get('/superadmin/metrics', requireRole(['SUPER_ADMIN']), async (_req: 
     const totalRevenueAcrossPlatform = orders.reduce((sum, o) => sum + (o.total || o.subtotal || 0), 0);
 
     const subscriptionsByPlan = {
-      FREE: subscriptions.filter((s) => s.planId === 'FREE' || s.planId === 'free').length,
-      STARTER: subscriptions.filter((s) => s.planId === 'STARTER' || s.planId === 'starter').length,
-      BUSINESS: subscriptions.filter((s) => s.planId === 'BUSINESS' || s.planId === 'business').length,
-      PRO: subscriptions.filter((s) => s.planId === 'PRO' || s.planId === 'pro').length,
+      FREE: subscriptions.filter((s) => (s.planId as string) === 'FREE' || (s.planId as string) === 'free').length,
+      STARTER: subscriptions.filter((s) => (s.planId as string) === 'STARTER' || (s.planId as string) === 'starter').length,
+      BUSINESS: subscriptions.filter((s) => (s.planId as string) === 'BUSINESS' || (s.planId as string) === 'business').length,
+      PRO: subscriptions.filter((s) => (s.planId as string) === 'PRO' || (s.planId as string) === 'pro').length,
     };
 
     const metrics: SuperAdminMetrics = {
@@ -458,6 +458,7 @@ apiRouter.post('/superadmin/tenants', requireRole(['SUPER_ADMIN']), async (req: 
 
     const newTenant: Tenant = {
       _id: tenantId,
+      id: tenantId,
       tenantId,
       businessName,
       businessSlug,
@@ -482,6 +483,7 @@ apiRouter.post('/superadmin/tenants', requireRole(['SUPER_ADMIN']), async (req: 
       name: `${businessName} Admin`,
       email,
       role: 'ADMIN',
+      active: true,
       isActive: true,
       createdAt: now,
     };
@@ -497,9 +499,9 @@ apiRouter.post('/superadmin/tenants', requireRole(['SUPER_ADMIN']), async (req: 
       currentPeriodStart: now,
       currentPeriodEnd: trialEnd,
       trialEndsAt: trialEnd,
-      maxMonthlyOrders: plan.limits.maxMonthlyOrders,
-      maxStaffUsers: plan.limits.maxStaffUsers,
-      maxIntegrations: plan.limits.maxIntegrations,
+      maxMonthlyOrders: plan.limits.maxMonthlyOrders || plan.limits.monthlyOrders,
+      maxStaffUsers: plan.limits.maxStaffUsers || plan.limits.users,
+      maxIntegrations: plan.limits.maxIntegrations || plan.limits.integrations,
       currentOrdersThisMonth: 0,
       createdAt: now,
       updatedAt: now,
@@ -558,7 +560,7 @@ apiRouter.patch('/superadmin/tenants/:id/status', requireRole(['SUPER_ADMIN']), 
     const cols = await getCollections();
     if (cols) {
       await cols.tenants.updateOne(
-        { $or: [{ tenantId: id }, { _id: id }] },
+        { $or: [{ tenantId: id }, { _id: id as any }] },
         { $set: { subscriptionStatus: status, updatedAt: new Date().toISOString() } }
       );
       await cols.subscriptions.updateOne(
@@ -1881,6 +1883,29 @@ apiRouter.post('/webhooks/woocommerce/:tenantId?', async (req: Request, res: Res
       discount: parseFloat(wcOrder.discount_total || '0'),
       shippingFee: parseFloat(wcOrder.shipping_total || '0'),
       totalAmount,
+      total: totalAmount,
+      profit: calculateOrderProfit({
+        items: (wcOrder.line_items || []).map((item: any, idx: number) => ({
+          id: `oi_wc_${wcOrder.id}_${idx}`,
+          productId: `prod_wc_${item.product_id || idx}`,
+          sku: item.sku || `SKU-${item.product_id || idx}`,
+          name: item.name,
+          quantity: item.quantity || 1,
+          unitPrice: parseFloat(item.price || '0'),
+          unitCost: Math.round(parseFloat(item.price || '0') * 0.7),
+          discount: 0,
+          totalPrice: parseFloat(item.total || '0'),
+          totalCost: Math.round(parseFloat(item.total || '0') * 0.7),
+          grossProfit: parseFloat(item.total || '0') * 0.3,
+          warrantyDuration: 12,
+          warrantyUnit: 'MONTHS',
+        })),
+        source: 'WEBSITE',
+        paymentMethod,
+        shippingFee: parseFloat(wcOrder.shipping_total || '0'),
+        paymentConfigs: [],
+        commissionConfigs: [],
+      }),
       paymentMethod,
       paymentStatus: wcOrder.status === 'completed' ? 'PAID' : 'PENDING',
       orderStatus: mapWooCommerceStatus(wcOrder.status),

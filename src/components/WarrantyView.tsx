@@ -46,7 +46,7 @@ export const WarrantyView: React.FC = () => {
   const [serialNumber, setSerialNumber] = useState('');
   const [imei, setImei] = useState('');
   const [warrantyDuration, setWarrantyDuration] = useState(12);
-  const [warrantyUnit, setWarrantyUnit] = useState<'DAYS' | 'MONTHS' | 'YEARS'>('MONTHS');
+  const [warrantyUnit, setWarrantyUnit] = useState<'DAYS' | 'MONTHS' | 'YEARS' | string>('MONTHS');
 
   // Claim Form State
   const [issueDescription, setIssueDescription] = useState('');

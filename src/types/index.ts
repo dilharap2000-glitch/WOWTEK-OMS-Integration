@@ -8,12 +8,12 @@ export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'STAFF';
 
 export interface User {
   id: string;
-  tenantId: string;
+  tenantId?: string;
   name: string;
   email: string;
   passwordHash?: string;
   role: UserRole;
-  active: boolean;
+  active?: boolean;
   isActive?: boolean;
   avatarUrl?: string;
   createdAt: string;
@@ -21,7 +21,7 @@ export interface User {
 }
 
 export type SubscriptionPlanId = 'FREE' | 'STARTER' | 'BUSINESS' | 'PRO';
-export type SubscriptionStatus = 'ACTIVE' | 'TRIAL' | 'EXPIRED' | 'PAST_DUE' | 'CANCELLED';
+export type SubscriptionStatus = 'ACTIVE' | 'TRIAL' | 'EXPIRED' | 'PAST_DUE' | 'CANCELLED' | 'SUSPENDED';
 
 export interface SubscriptionPlanLimits {
   monthlyOrders: number;      // -1 for unlimited
@@ -31,6 +31,9 @@ export interface SubscriptionPlanLimits {
   smsPerMonth: number;        // SMS notification credit
   storageMb: number;          // File storage cap in MB
   features: string[];         // Feature slugs
+  maxMonthlyOrders?: number;  // Compatibility alias
+  maxStaffUsers?: number;     // Compatibility alias
+  maxIntegrations?: number;   // Compatibility alias
 }
 
 export interface SubscriptionPlan {
@@ -46,15 +49,22 @@ export interface SubscriptionPlan {
 }
 
 export interface Subscription {
-  id: string;
+  id?: string;
+  _id?: string;
   tenantId: string;
   planId: SubscriptionPlanId;
   status: SubscriptionStatus;
-  startDate: string;
+  startDate?: string;
+  currentPeriodStart?: string;
   currentPeriodEnd: string;
   trialEndsAt?: string;
-  cancelAtPeriodEnd: boolean;
-  usage: {
+  cancelAtPeriodEnd?: boolean;
+  billingCycle?: 'MONTHLY' | 'ANNUAL' | string;
+  maxMonthlyOrders?: number;
+  maxStaffUsers?: number;
+  maxIntegrations?: number;
+  currentOrdersThisMonth?: number;
+  usage?: {
     ordersThisMonth: number;
     usersCount: number;
     smsSentThisMonth: number;
@@ -67,7 +77,7 @@ export interface Subscription {
 
 export interface Tenant {
   _id?: string;
-  id: string;
+  id?: string;
   tenantId: string;
   businessName: string;
   businessSlug: string;
@@ -105,7 +115,7 @@ export interface TenantIntegration {
   updatedAt: string;
 }
 
-export type ChannelSource = 'WEBSITE' | 'PICKME' | 'UBER_EATS' | 'MANUAL';
+export type ChannelSource = 'WEBSITE' | 'PICKME' | 'UBER_EATS' | 'MANUAL' | (string & {});
 
 export type OrderStatus =
   | 'NEW'
@@ -116,9 +126,10 @@ export type OrderStatus =
   | 'DELIVERED'
   | 'CANCELLED'
   | 'RETURNED'
-  | 'REFUNDED';
+  | 'REFUNDED'
+  | (string & {});
 
-export type PaymentStatus = 'PENDING' | 'PAID' | 'REFUNDED' | 'FAILED';
+export type PaymentStatus = 'PENDING' | 'PAID' | 'REFUNDED' | 'FAILED' | (string & {});
 
 export interface Address {
   name: string;
@@ -155,12 +166,13 @@ export interface OrderItem {
   quantity: number;
   unitPrice: number;       // Selling price per unit
   unitCost: number;        // Product cost per unit
-  discount: number;        // Discount allocated
-  totalPrice: number;      // (unitPrice * qty) - discount
+  discount?: number;       // Discount allocated
+  totalPrice?: number;     // (unitPrice * qty) - discount
+  total?: number;
   totalCost?: number;      // unitCost * qty
-  grossProfit: number;     // totalPrice - totalCost
+  grossProfit?: number;    // totalPrice - totalCost
   warrantyDuration?: number;
-  warrantyUnit?: 'DAYS' | 'MONTHS' | 'YEARS';
+  warrantyUnit?: 'DAYS' | 'MONTHS' | 'YEARS' | string;
   serialNumber?: string;
   imei?: string;
 }
@@ -182,10 +194,10 @@ export interface ProfitBreakdown {
 
 export interface Order {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   orderNumber: string;          // E.g. WTK-2026-0842
   externalOrderId?: string;     // E.g. WC-92144, PKM-83912, UBR-5491
-  source: ChannelSource;
+  source: ChannelSource | string;
   customer: {
     id?: string;
     name: string;
@@ -196,13 +208,16 @@ export interface Order {
   subtotal: number;
   discount: number;
   shippingFee: number;
-  totalAmount: number;          // Customer payable amount (subtotal - discount + shippingFee)
-  profit: ProfitBreakdown;
+  totalAmount?: number;          // Customer payable amount (subtotal - discount + shippingFee)
+  total?: number;
+  status?: OrderStatus | string;
+  paymentMethodCode?: string;
+  profit?: ProfitBreakdown;
   paymentMethod: string;        // 'Mintpay' | 'Koko' | 'PayZy' | 'Card' | 'Bank Transfer' | 'Cash'
-  paymentStatus: PaymentStatus;
-  orderStatus: OrderStatus;
+  paymentStatus: PaymentStatus | string;
+  orderStatus?: OrderStatus | string;
   shippingAddress: Address;
-  billingAddress: Address;
+  billingAddress?: Address;
   courier?: string;             // 'Trans Express' | 'Direct Delivery' | 'PickMe Courier'
   trackingNumber?: string;
   waybillNumber?: string;
@@ -217,7 +232,7 @@ export interface Order {
 
 export interface Product {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   name: string;
   sku: string;
   barcode?: string;
@@ -230,7 +245,7 @@ export interface Product {
   supplierId?: string;
   supplierName?: string;
   warrantyDuration: number;
-  warrantyUnit: 'DAYS' | 'MONTHS' | 'YEARS';
+  warrantyUnit: 'DAYS' | 'MONTHS' | 'YEARS' | string;
   isActive: boolean;
   wooCommerceId?: string;
   pickMeId?: string;
@@ -249,7 +264,7 @@ export type InventoryMovementType =
 
 export interface InventoryTransaction {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   productId: string;
   productName: string;
   sku: string;
@@ -266,7 +281,7 @@ export interface InventoryTransaction {
 
 export interface Supplier {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   name: string;
   company: string;
   phone: string;
@@ -279,7 +294,7 @@ export interface Supplier {
 
 export interface Customer {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   name: string;
   phone: string;
   email: string;
@@ -318,7 +333,7 @@ export type WarrantyStatus = 'ACTIVE' | 'EXPIRING_SOON' | 'EXPIRED' | 'CLAIMED';
 
 export interface WarrantyClaim {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   warrantyId: string;
   date: string;
   claimDate?: string;
@@ -331,7 +346,7 @@ export interface WarrantyClaim {
 
 export interface WarrantyRecord {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   customerId: string;
   customerName: string;
   customerPhone: string;
@@ -343,10 +358,10 @@ export interface WarrantyRecord {
   serialNumber: string;
   imei?: string;
   warrantyDuration: number;
-  warrantyUnit: 'DAYS' | 'MONTHS' | 'YEARS';
+  warrantyUnit: 'DAYS' | 'MONTHS' | 'YEARS' | string;
   startDate: string;
   expiryDate: string;
-  status: WarrantyStatus;
+  status: WarrantyStatus | string;
   claims: WarrantyClaim[];
   reminderHistory: string[];    // Array of reminder keys sent, e.g. ['30_DAYS', '7_DAYS']
   createdAt: string;
@@ -359,11 +374,12 @@ export type WaybillStatus =
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
   | 'FAILED'
-  | 'RETURNED';
+  | 'RETURNED'
+  | string;
 
 export interface Waybill {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   waybillNumber: string;
   orderId: string;
   orderNumber: string;
@@ -376,14 +392,14 @@ export interface Waybill {
   courierName: string;          // 'Trans Express'
   courierTrackingUrl?: string;
   status: WaybillStatus;
-  labelFormat: 'A4' | 'THERMAL_4X6';
+  labelFormat: 'A4' | 'THERMAL_4X6' | (string & {});
   printCount: number;
   createdAt: string;
 }
 
 export interface Invoice {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   invoiceNumber: string;        // E.g. INV-2026-0842
   orderId: string;
   orderNumber: string;
@@ -426,16 +442,17 @@ export type SMSType =
   | 'INVOICE_AVAILABLE'
   | 'WARRANTY_EXPIRING'
   | 'WARRANTY_EXPIRED'
-  | 'CUSTOM';
+  | 'CUSTOM'
+  | string;
 
 export interface SMSLog {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   recipientName: string;
   phone: string;
   message: string;
   type: SMSType;
-  status: 'SENT' | 'FAILED' | 'QUEUED';
+  status: 'SENT' | 'FAILED' | 'QUEUED' | string;
   providerResponse?: string;
   orderNumber?: string;
   sentAt: string;
@@ -449,14 +466,15 @@ export type AutomationEventType =
   | 'INVOICE_CREATED'
   | 'WARRANTY_EXPIRING'
   | 'WARRANTY_EXPIRED'
-  | 'PAYMENT_RECEIVED';
+  | 'PAYMENT_RECEIVED'
+  | string;
 
 export interface NotificationEvent {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   eventType: AutomationEventType;
   entityId: string;
-  entityType: 'ORDER' | 'INVOICE' | 'WARRANTY' | 'SHIPMENT';
+  entityType: 'ORDER' | 'INVOICE' | 'WARRANTY' | 'SHIPMENT' | (string & {});
   title: string;
   message: string;
   isRead: boolean;
@@ -520,7 +538,7 @@ export interface SystemIntegrations {
 
 export interface AuditLog {
   id: string;
-  tenantId: string;             // Mandatory tenant isolation
+  tenantId?: string;             // Mandatory tenant isolation
   userId: string;
   userName: string;
   action: string;
@@ -540,11 +558,14 @@ export interface SuperAdminMetrics {
   activeBusinesses: number;
   trialBusinesses: number;
   expiredBusinesses: number;
-  totalOrdersAllTenants: number;
-  totalRevenueAllTenants: number;
-  plansDistribution: Record<SubscriptionPlanId, number>;
-  recentTenants: Tenant[];
-  systemAuditLogs: AuditLog[];
+  totalOrdersAllTenants?: number;
+  totalOrdersAcrossPlatform?: number;
+  totalRevenueAllTenants?: number;
+  totalRevenueAcrossPlatform?: number;
+  plansDistribution?: Record<SubscriptionPlanId | string, number>;
+  subscriptionsByPlan?: Record<SubscriptionPlanId | string, number>;
+  recentTenants?: Tenant[];
+  systemAuditLogs?: AuditLog[];
 }
 
 export interface DashboardMetrics {

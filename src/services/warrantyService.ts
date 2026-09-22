@@ -12,7 +12,7 @@ import { WarrantyRecord, WarrantyStatus } from '../types';
 export function calculateExpiryDate(
   startDateStr: string,
   duration: number,
-  unit: 'DAYS' | 'MONTHS' | 'YEARS'
+  unit: 'DAYS' | 'MONTHS' | 'YEARS' | string
 ): string {
   const date = new Date(startDateStr);
   if (isNaN(date.getTime())) {
@@ -21,10 +21,11 @@ export function calculateExpiryDate(
 
   if (unit === 'DAYS') {
     date.setDate(date.getDate() + duration);
-  } else if (unit === 'MONTHS') {
-    date.setMonth(date.getMonth() + duration);
   } else if (unit === 'YEARS') {
     date.setFullYear(date.getFullYear() + duration);
+  } else {
+    // Default or MONTHS
+    date.setMonth(date.getMonth() + duration);
   }
 
   return date.toISOString();
@@ -32,7 +33,7 @@ export function calculateExpiryDate(
 
 export function evaluateWarrantyStatus(
   expiryDateStr: string,
-  existingStatus?: WarrantyStatus
+  existingStatus?: WarrantyStatus | string
 ): { status: WarrantyStatus; daysRemaining: number } {
   if (existingStatus === 'CLAIMED') {
     return { status: 'CLAIMED', daysRemaining: 0 };

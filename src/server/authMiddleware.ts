@@ -168,8 +168,10 @@ export function authenticateTenant(req: Request, res: Response, next: NextFuncti
 
 /**
  * Role-Based Access Control (RBAC) Guard
+ * Supports both rest arguments (requireRoles('ADMIN', 'STAFF')) and array argument (requireRole(['ADMIN', 'STAFF'])).
  */
-export function requireRoles(...allowedRoles: UserRole[]) {
+export function requireRoles(...allowedRoles: (UserRole | UserRole[])[]) {
+  const flatRoles = allowedRoles.flat() as UserRole[];
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -179,15 +181,17 @@ export function requireRoles(...allowedRoles: UserRole[]) {
       return next(); // Super admin bypasses standard role checks
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    if (!flatRoles.includes(req.user.role)) {
       return res.status(403).json({
-        error: `Access denied. Requires one of roles: [${allowedRoles.join(', ')}]. Current role: ${req.user.role}`,
+        error: `Access denied. Requires one of roles: [${flatRoles.join(', ')}]. Current role: ${req.user.role}`,
       });
     }
 
     next();
   };
 }
+
+export const requireRole = requireRoles;
 
 /**
  * Helper to build isolated MongoDB filter.
