@@ -1,0 +1,6 @@
+{
+  "name": "WOWTEK Order Management System",
+  "description": "Production-ready Order Management System for WOWTEK Sri Lanka managing WooCommerce, PickMe, Uber Eats, courier shipments, inventory, warranties, invoices, and profit tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
