@@ -1,11 +1,13 @@
 /**
- * WOWTEK OMS — Print Modals (Invoices & Thermal 4x6 Waybills)
+ * WOWTEK OMS — Print Modals (Invoices & Thermal 100x150mm Waybills)
  * Business: WOWTEK (wowtek.lk)
+ * Physical Thermal Label: 100mm x 150mm (4x6 inch), 203 DPI compatible
  */
 
-import React from 'react';
-import { Printer, X, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Printer, X, Download, FileText, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
+import { ThermalWaybill } from './ThermalWaybill';
 
 export const PrintModals: React.FC = () => {
   const {
@@ -15,7 +17,13 @@ export const PrintModals: React.FC = () => {
     printableInvoice,
     setPrintableInvoice,
     businessSettings,
+    orders,
   } = useOMS();
+
+  const [activeFormat, setActiveFormat] = useState<'THERMAL_4X6' | 'A4'>(
+    printableWaybillFormat || 'THERMAL_4X6'
+  );
+  const [downloadSuccessToast, setDownloadSuccessToast] = useState(false);
 
   if (!printableWaybills && !printableInvoice) return null;
 
@@ -23,118 +31,187 @@ export const PrintModals: React.FC = () => {
     window.print();
   };
 
+  const handleDownloadPDF = () => {
+    setDownloadSuccessToast(true);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => setDownloadSuccessToast(false), 4000);
+    }, 400);
+  };
+
   return (
     <>
-      {/* 1. Waybill Print Preview Modal */}
+      {/* 1. Waybill Dedicated Print Preview Modal */}
       {printableWaybills && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-4xl shadow-2xl p-6 relative max-h-[90vh] flex flex-col print:bg-white print:border-none print:shadow-none print:max-h-none print:p-0">
-            {/* Modal Controls (Hidden in Print) */}
-            <div className="flex items-center justify-between pb-4 border-b border-neutral-800 print:hidden">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
+          {/* Dynamic Print Styles for exact 100mm x 150mm Page and Margins */}
+          <style>{`
+            @media print {
+              @page {
+                size: ${activeFormat === 'THERMAL_4X6' ? '100mm 150mm' : 'A4 portrait'};
+                margin: 0;
+              }
+              html, body {
+                width: ${activeFormat === 'THERMAL_4X6' ? '100mm' : '100%'} !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                color: #000000 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              body * {
+                visibility: hidden;
+              }
+              #printable-waybill-canvas, #printable-waybill-canvas * {
+                visibility: visible;
+              }
+              #printable-waybill-canvas {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: ${activeFormat === 'THERMAL_4X6' ? '100mm' : '100%'};
+                margin: 0;
+                padding: 0;
+              }
+              .waybill-sheet {
+                width: 100mm !important;
+                height: 150mm !important;
+                min-width: 100mm !important;
+                min-height: 150mm !important;
+                max-width: 100mm !important;
+                max-height: 150mm !important;
+                margin: 0 !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                box-sizing: border-box !important;
+                border: 2px solid #000000 !important;
+              }
+            }
+          `}</style>
+
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-4xl shadow-2xl p-5 sm:p-6 relative max-h-[92vh] flex flex-col print:bg-white print:border-none print:shadow-none print:max-h-none print:p-0">
+            {/* Modal Controls (Hidden during physical print) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-neutral-800 print:hidden">
               <div>
-                <h2 className="text-base font-bold text-white">
-                  Waybill Print Preview ({printableWaybills.length} consignment{printableWaybills.length > 1 ? 's' : ''})
-                </h2>
-                <p className="text-xs text-neutral-400 font-mono">
-                  Layout: {printableWaybillFormat === 'THERMAL_4X6' ? 'Thermal 4×6" Label (Courier Standard)' : 'A4 Sheet'}
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>WOWTEK Waybill Print Preview</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 font-mono font-bold border border-cyan-500/20">
+                      {printableWaybills.length} {printableWaybills.length === 1 ? 'Label' : 'Labels'}
+                    </span>
+                  </h2>
+                </div>
+                <p className="text-xs text-neutral-400 font-mono mt-0.5">
+                  Target Size: {activeFormat === 'THERMAL_4X6' ? '100mm × 150mm (4 × 6" Thermal Label)' : 'A4 Sheet'} • Courier: Trans Express
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              {/* Format Switcher & Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Format selection */}
+                <div className="flex items-center bg-neutral-950 border border-neutral-800 rounded-lg p-1 text-xs">
+                  <button
+                    onClick={() => setActiveFormat('THERMAL_4X6')}
+                    className={`px-2.5 py-1 rounded font-semibold transition-colors cursor-pointer ${
+                      activeFormat === 'THERMAL_4X6'
+                        ? 'bg-cyan-500/20 text-cyan-300 font-bold'
+                        : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    100 × 150 mm Thermal
+                  </button>
+                  <button
+                    onClick={() => setActiveFormat('A4')}
+                    className={`px-2.5 py-1 rounded font-semibold transition-colors cursor-pointer ${
+                      activeFormat === 'A4'
+                        ? 'bg-cyan-500/20 text-cyan-300 font-bold'
+                        : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    A4 Paper
+                  </button>
+                </div>
+
+                {/* Print Selected / All */}
                 <button
                   onClick={handlePrint}
-                  className="px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-neutral-950 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md"
+                  className="px-3.5 py-2 bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md shadow-cyan-500/20"
+                  title="Print to thermal label printer"
                 >
                   <Printer className="w-4 h-4" />
-                  <span>Print Labels Now</span>
+                  <span>{printableWaybills.length > 1 ? `Print Selected (${printableWaybills.length})` : 'Print Waybill'}</span>
                 </button>
+
+                {/* Download PDF */}
+                <button
+                  onClick={handleDownloadPDF}
+                  className="px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer border border-neutral-700"
+                  title="Download / Save as PDF"
+                >
+                  <Download className="w-4 h-4 text-neutral-400" />
+                  <span>Download PDF</span>
+                </button>
+
+                {/* Close */}
                 <button
                   onClick={() => setPrintableWaybills(null)}
                   className="p-2 text-neutral-400 hover:text-white rounded-lg hover:bg-neutral-800 cursor-pointer"
+                  title="Close preview"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Printable Content Canvas */}
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6 print:space-y-8 print:p-0">
-              {printableWaybills.map((wb, index) => (
-                <div
-                  key={wb.id}
-                  className={`bg-white text-black p-6 mx-auto rounded-lg shadow-md print:shadow-none print:rounded-none border border-neutral-300 print:border-black ${
-                    printableWaybillFormat === 'THERMAL_4X6'
-                      ? 'w-[384px] min-h-[576px] font-sans' // 4x6 approx 96dpi
-                      : 'w-full max-w-2xl min-h-[800px]'
-                  }`}
-                  style={{ pageBreakAfter: 'always' }}
-                >
-                  {/* Courier & Waybill Header */}
-                  <div className="flex items-center justify-between border-b-2 border-black pb-3">
-                    <div>
-                      <div className="text-xl font-black tracking-tight">{wb.courierName.toUpperCase()}</div>
-                      <div className="text-[10px] font-mono">DOMESTIC LOGISTICS NETWORK</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-mono font-bold">{wb.waybillNumber}</div>
-                      <div className="text-[10px] font-mono">DATE: {new Date(wb.createdAt).toLocaleDateString()}</div>
-                    </div>
-                  </div>
-
-                  {/* COD Warning Box */}
-                  <div className="my-3 p-3 bg-neutral-100 border-2 border-black flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] uppercase font-bold tracking-wider">Payment Term</div>
-                      <div className="text-base font-black">
-                        {wb.codAmount > 0 ? `COLLECT COD: Rs. ${wb.codAmount.toLocaleString()}` : 'PREPAID / NO COD'}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="px-2 py-1 bg-black text-white font-black text-xs">
-                        {wb.codAmount > 0 ? 'COD' : 'PAID'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Sender & Receiver Info */}
-                  <div className="grid grid-cols-2 gap-3 text-xs my-3 border-b border-black pb-3">
-                    <div>
-                      <div className="text-[10px] font-bold text-neutral-600 uppercase">Shipper (From):</div>
-                      <div className="font-bold">{businessSettings.name}</div>
-                      <div className="text-[11px] leading-tight">{businessSettings.address}</div>
-                      <div className="text-[11px] font-mono">Tel: {businessSettings.phone}</div>
-                    </div>
-
-                    <div>
-                      <div className="text-[10px] font-bold text-neutral-600 uppercase">Consignee (To):</div>
-                      <div className="font-bold text-sm">{wb.customerName}</div>
-                      <div className="font-mono font-bold text-sm">{wb.customerPhone}</div>
-                      <div className="text-[11px] leading-tight font-medium mt-1">{wb.address}</div>
-                      <div className="font-bold uppercase mt-0.5 text-xs">{wb.city}</div>
-                    </div>
-                  </div>
-
-                  {/* Simulated Courier Barcode */}
-                  <div className="my-4 py-2 text-center border-t border-b border-black">
-                    <div className="h-12 bg-[repeating-linear-gradient(90deg,#000,#000_2px,transparent_2px,transparent_5px)] w-4/5 mx-auto" />
-                    <div className="font-mono text-xs font-bold mt-1 tracking-widest">
-                      *{wb.waybillNumber}*
-                    </div>
-                  </div>
-
-                  {/* Footer Order Note */}
-                  <div className="text-[10px] text-neutral-700 flex justify-between pt-2">
-                    <span>Order Ref: {wb.orderNumber}</span>
-                    <span>Trans Express Tracking LK</span>
-                  </div>
+            {downloadSuccessToast && (
+              <div className="mt-3 p-3 bg-cyan-950/60 border border-cyan-500/30 rounded-xl text-cyan-200 text-xs flex items-center justify-between animate-in fade-in print:hidden">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>
+                    To save as PDF: in the browser print dialog, set <strong>Destination</strong> to <strong>"Save as PDF"</strong> and select Paper Size: <strong>4 x 6 in (100 x 150 mm)</strong>.
+                  </span>
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Thermal Waybill Preview Stage */}
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-neutral-950/50 rounded-xl mt-4 print:p-0 print:m-0 print:bg-white print:overflow-visible">
+              <div id="printable-waybill-canvas" className="space-y-6 print:space-y-0">
+                {printableWaybills.map((wb) => {
+                  const parentOrder = orders.find(
+                    (o) => o.id === wb.orderId || o.orderNumber === wb.orderNumber
+                  );
+
+                  return (
+                    <ThermalWaybill
+                      key={wb.id}
+                      waybill={wb}
+                      order={parentOrder}
+                      businessSettings={businessSettings}
+                      format={activeFormat}
+                      courierName={wb.courierName || 'Trans Express'}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer Guidance (Print hidden) */}
+            <div className="pt-3 border-t border-neutral-800 flex items-center justify-between text-[11px] text-neutral-400 print:hidden font-mono">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                <span>203 DPI Code128 scannable barcode generated dynamically</span>
+              </div>
+              <div>Exact physical size: 100 mm × 150 mm (Portrait)</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. Official Invoice Print Preview Modal */}
+      {/* 2. Official Tax Invoice Print Preview Modal */}
       {printableInvoice && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">
           <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-4xl shadow-2xl p-6 relative max-h-[90vh] flex flex-col print:bg-white print:border-none print:shadow-none print:max-h-none print:p-0">

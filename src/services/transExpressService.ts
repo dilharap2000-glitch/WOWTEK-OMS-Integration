@@ -18,6 +18,7 @@ export interface TransExpressCredentials {
 export interface TransExpressShipmentRequest {
   orderId: string;
   orderNumber: string;
+  source?: string;
   customerName: string;
   customerPhone: string;
   deliveryAddress: string;
@@ -65,8 +66,18 @@ export class TransExpressServiceAdapter {
 
   /**
    * Creates a formal shipment consignment in Trans Express
+   * STRICT BUSINESS RULE: Trans Express shipments can ONLY be created for WEBSITE / WOOCOMMERCE orders.
    */
   public async createShipment(req: TransExpressShipmentRequest): Promise<TransExpressShipmentResponse> {
+    if (req.source && req.source !== 'WEBSITE') {
+      return {
+        success: false,
+        isConfigured: true,
+        message: `Trans Express shipment creation rejected. Shipments can only be created for WEBSITE / WooCommerce orders. Delivery for ${req.source} is handled by the platform.`,
+        error: `INVALID_SOURCE: ${req.source}`,
+      };
+    }
+
     if (!this.isConfigured()) {
       // In development or when credentials are not configured, return clear warning response
       return {

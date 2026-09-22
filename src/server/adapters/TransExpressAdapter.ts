@@ -43,6 +43,12 @@ export class TransExpressAdapter {
     trackingNumber: string;
     trackingUrl: string;
   }> {
+    if (order.source && order.source !== 'WEBSITE') {
+      throw new Error(
+        `Trans Express consignment rejected: Waybills can only be created for WEBSITE / WooCommerce orders. Delivery for ${order.source} is handled by the platform.`
+      );
+    }
+
     const timestamp = Date.now().toString().slice(-6);
     const waybillNumber = `WB-${order.orderNumber || 'WTK'}-${timestamp}`;
     const trackingNumber = `TEX-${this.config.merchantCode.slice(0, 3).toUpperCase()}-${timestamp}`;

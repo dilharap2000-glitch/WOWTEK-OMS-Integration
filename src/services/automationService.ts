@@ -51,3 +51,79 @@ export const DEFAULT_AUTOMATION_RULES: AutomationRule[] = [
     description: 'Dispatches SMS containing courier tracking number to customer.',
   },
 ];
+
+/**
+ * WOWTEK Channel-Specific Fulfillment Rules:
+ *
+ * 1. WEBSITE / WOOCOMMERCE:
+ *    - Import order automatically
+ *    - Create invoice record & allow PDF
+ *    - Allow optional customer SMS
+ *    - Create Trans Express shipment
+ *    - Generate waybill & print 100mm x 150mm thermal waybill
+ *    - Track shipment
+ *
+ * 2. PICKME:
+ *    - Store order data, calculate PickMe commission, create internal bill/invoice record
+ *    - DO NOT create courier waybill or Trans Express shipment
+ *    - PickMe handles delivery
+ *
+ * 3. UBER EATS:
+ *    - Store order data, calculate Uber commission, create internal bill/invoice record
+ *    - DO NOT create courier waybill or Trans Express shipment
+ *    - Uber handles delivery
+ */
+
+export interface ChannelCapabilities {
+  invoiceAvailable: boolean;
+  optionalSms: boolean;
+  waybillAvailable: boolean;
+  transExpressAvailable: boolean;
+  deliveryHandledBy?: 'PickMe' | 'Uber' | 'Store / Counter';
+}
+
+export function getChannelCapabilities(source?: string): ChannelCapabilities {
+  switch (source) {
+    case 'WEBSITE':
+      return {
+        invoiceAvailable: true,
+        optionalSms: true,
+        waybillAvailable: true,
+        transExpressAvailable: true,
+      };
+    case 'PICKME':
+      return {
+        invoiceAvailable: true,
+        optionalSms: true,
+        waybillAvailable: false,
+        transExpressAvailable: false,
+        deliveryHandledBy: 'PickMe',
+      };
+    case 'UBER_EATS':
+      return {
+        invoiceAvailable: true,
+        optionalSms: true,
+        waybillAvailable: false,
+        transExpressAvailable: false,
+        deliveryHandledBy: 'Uber',
+      };
+    case 'MANUAL':
+    default:
+      return {
+        invoiceAvailable: true,
+        optionalSms: true,
+        waybillAvailable: false,
+        transExpressAvailable: false,
+        deliveryHandledBy: 'Store / Counter',
+      };
+  }
+}
+
+export function canCreateWaybill(source?: string): boolean {
+  return source === 'WEBSITE';
+}
+
+export function canCreateTransExpressShipment(source?: string): boolean {
+  return source === 'WEBSITE';
+}
+

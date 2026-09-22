@@ -381,6 +381,8 @@ export interface Waybill {
   id: string;
   tenantId?: string;             // Mandatory tenant isolation
   waybillNumber: string;
+  trackingNumber?: string;
+  barcodeValue?: string;
   orderId: string;
   orderNumber: string;
   externalOrderId?: string;
@@ -389,11 +391,15 @@ export interface Waybill {
   address: string;
   city: string;
   codAmount: number;            // Cash on delivery amount
+  paymentMethod?: string;
   courierName: string;          // 'Trans Express'
   courierTrackingUrl?: string;
   status: WaybillStatus;
   labelFormat: 'A4' | 'THERMAL_4X6' | (string & {});
   printCount: number;
+  items?: { name: string; quantity: number; sku?: string }[];
+  isFragile?: boolean;
+  notes?: string;
   createdAt: string;
 }
 

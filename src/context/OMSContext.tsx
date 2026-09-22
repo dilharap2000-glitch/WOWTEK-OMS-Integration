@@ -115,10 +115,18 @@ interface OMSContextType {
 
   // Waybills & Invoices
   waybills: Waybill[];
-  createWaybill: (orderId: string, courierName?: string, labelFormat?: 'A4' | 'THERMAL_4X6') => Waybill;
+  createWaybill: (
+    orderId: string,
+    courierName?: string,
+    labelFormat?: 'A4' | 'THERMAL_4X6',
+    customWaybillNumber?: string,
+    customTrackingNumber?: string
+  ) => Waybill;
   updateWaybillStatus: (waybillId: string, status: Waybill['status']) => void;
+  updateWaybill: (waybillId: string, updates: Partial<Waybill>) => void;
   invoices: Invoice[];
   generateInvoice: (orderId: string) => Invoice;
+  sendInvoiceToCustomer: (orderId: string) => Promise<{ success: boolean; message: string }>;
 
   // Integrations & SMS
   integrations: SystemIntegrations;
@@ -684,21 +692,82 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newInvoice;
   };
 
+  const sendInvoiceToCustomer = async (orderId: string): Promise<{ success: boolean; message: string }> => {
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) return { success: false, message: 'Order not found' };
+
+    let inv = invoices.find((i) => i.orderId === orderId);
+    if (!inv) {
+      inv = generateInvoice(orderId);
+    }
+
+    const message = `WOWTEK: Hi ${order.customer.name}, your invoice ${inv.invoiceNumber} for order ${order.orderNumber} (Rs. ${(order.totalAmount || order.subtotal).toLocaleString()}) has been issued. Thank you for shopping with wowtek.lk`;
+
+    await sendSMS(
+      order.customer.phone,
+      order.customer.name,
+      message,
+      'INVOICE_AVAILABLE',
+      order.orderNumber
+    );
+
+    logAudit(
+      'ORDER_UPDATED',
+      'INVOICES',
+      `Sent invoice ${inv.invoiceNumber} to customer ${order.customer.phone} via SMS`,
+      order.id
+    );
+
+    return { success: true, message: `Invoice ${inv.invoiceNumber} sent to ${order.customer.phone}` };
+  };
+
   // Waybills
   const createWaybill = (
     orderId: string,
     courierName: string = 'Trans Express',
-    labelFormat: 'A4' | 'THERMAL_4X6' = 'THERMAL_4X6'
+    labelFormat: 'A4' | 'THERMAL_4X6' = 'THERMAL_4X6',
+    customWaybillNumber?: string,
+    customTrackingNumber?: string
   ): Waybill => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) throw new Error('Order not found');
 
-    const waybillNumber = `WB-TEX-2026-${String(Math.floor(1000 + Math.random() * 9000))}`;
-    const trackingNumber = `TEX-${String(Math.floor(1000000 + Math.random() * 9000000))}`;
+    // STRICT BUSINESS RULE: WAYBILL MUST ONLY BE CREATED FOR WEBSITE / WOOCOMMERCE ORDERS.
+    if (order.source !== 'WEBSITE') {
+      throw new Error(
+        `Waybill creation rejected: Waybills can only be created for WEBSITE / WooCommerce orders. Delivery for ${order.source} is handled by the platform.`
+      );
+    }
+
+    const waybillNumber =
+      customWaybillNumber?.trim() || `WB-TEX-2026-${String(Math.floor(1000 + Math.random() * 9000))}`;
+    const trackingNumber =
+      customTrackingNumber?.trim() || `TEX-${String(Math.floor(1000000 + Math.random() * 9000000))}`;
+
+    const itemsSummary =
+      order.items && order.items.length > 0
+        ? order.items.map((i) => ({ name: i.name, quantity: i.quantity, sku: i.sku }))
+        : [{ name: 'Merchandise Package', quantity: 1 }];
+
+    const isFragileOrder = Boolean(
+      order.items.some((i) => {
+        const lower = (i.name || '').toLowerCase();
+        return (
+          lower.includes('glass') ||
+          lower.includes('screen') ||
+          lower.includes('display') ||
+          lower.includes('fragile') ||
+          lower.includes('watch') ||
+          lower.includes('phone')
+        );
+      })
+    );
 
     const newWaybill: Waybill = {
       id: `wb_${Date.now()}`,
       waybillNumber,
+      trackingNumber,
+      barcodeValue: waybillNumber,
       orderId: order.id,
       orderNumber: order.orderNumber,
       externalOrderId: order.externalOrderId,
@@ -706,12 +775,15 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       customerPhone: order.customer.phone,
       address: `${order.shippingAddress.addressLine1}, ${order.shippingAddress.city}`,
       city: order.shippingAddress.city,
-      codAmount: order.paymentStatus === 'PAID' ? 0 : order.totalAmount,
+      codAmount: order.paymentStatus === 'PAID' ? 0 : (order.totalAmount || order.total || 0),
+      paymentMethod: order.paymentMethod,
       courierName,
       courierTrackingUrl: `https://transexpress.lk/track/${trackingNumber}`,
       status: 'CREATED',
       labelFormat,
       printCount: 0,
+      items: itemsSummary,
+      isFragile: isFragileOrder,
       createdAt: new Date().toISOString(),
     };
 
@@ -740,6 +812,28 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     return newWaybill;
+  };
+
+  const updateWaybill = (waybillId: string, updates: Partial<Waybill>) => {
+    setWaybills((prev) =>
+      prev.map((wb) => {
+        if (wb.id === waybillId) {
+          const updated = { ...wb, ...updates };
+          if (updates.waybillNumber) {
+            updated.barcodeValue = updates.waybillNumber;
+            // keep parent order in sync
+            setOrders((prevOrders) =>
+              prevOrders.map((o) =>
+                o.id === wb.orderId ? { ...o, waybillNumber: updates.waybillNumber } : o
+              )
+            );
+          }
+          return updated;
+        }
+        return wb;
+      })
+    );
+    logAudit('WAYBILL_UPDATED', 'WAYBILLS', `Updated consignment details for waybill ${waybillId}`, waybillId);
   };
 
   const updateWaybillStatus = (waybillId: string, status: Waybill['status']) => {
@@ -907,28 +1001,14 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status
     );
 
-    // Automation: When CONFIRMED -> generate invoice automatically
+    // Automation: When CONFIRMED -> generate invoice automatically for internal record
     if (status === 'CONFIRMED' && !order.invoiceNumber) {
       generateInvoice(orderId);
-      // Auto-send SMS
-      smsService
-        .sendSMS({
-          recipientName: order.customer.name,
-          phone: order.customer.phone,
-          type: 'ORDER_CONFIRMED',
-          data: {
-            customerName: order.customer.name,
-            orderNumber: order.orderNumber,
-          },
-          orderNumber: order.orderNumber,
-        })
-        .then((res) => {
-          setSmsLogs((prev) => [res.log, ...prev]);
-        });
+      // NOTE: Sending invoice/bill to customer is strictly OPTIONAL via the [Send Invoice to Customer] action.
     }
 
-    // Automation: When READY_TO_SHIP -> auto-create waybill if none exists
-    if (status === 'READY_TO_SHIP' && !order.waybillNumber) {
+    // Automation: When READY_TO_SHIP -> auto-create waybill if none exists (STRICTLY FOR WEBSITE ORDERS ONLY)
+    if (status === 'READY_TO_SHIP' && !order.waybillNumber && order.source === 'WEBSITE') {
       createWaybill(orderId, order.courier || 'Trans Express');
     }
 
@@ -1367,8 +1447,10 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         waybills,
         createWaybill,
         updateWaybillStatus,
+        updateWaybill,
         invoices,
         generateInvoice,
+        sendInvoiceToCustomer,
         integrations,
         updateIntegration,
         smsLogs,
