@@ -137,12 +137,26 @@ export function processWooCommerceOrder(params: {
 } {
   const { tenantId = 'tenant_wowtek_lk', wcOrder, existingOrders, availableProducts, paymentConfigs, commissionConfigs } = params;
 
+  // 1. STRICT STATUS FILTERING (BUSINESS RULE):
+  // - Do NOT import pending orders.
+  // - Do NOT import failed orders.
+  // - Do NOT import cancelled orders.
+  // - Do NOT import on-hold orders.
+  // - Only import WooCommerce orders whose status is "processing" or "completed".
+  const statusLower = (wcOrder.status || '').toLowerCase().trim();
+  if (statusLower !== 'processing' && statusLower !== 'completed') {
+    return {
+      success: false,
+      error: `WooCommerce Order #${wcOrder.id} status is "${wcOrder.status}". Only "processing" or "completed" orders are imported into WOWTEK OMS.`,
+    };
+  }
+
   const externalOrderId = `WC-${wcOrder.id}`;
   const source: ChannelSource = 'WEBSITE';
 
-  // 1. DUPLICATE CHECK: source + externalOrderId
+  // 2. DUPLICATE CHECK: source + externalOrderId
   const isDuplicate = existingOrders.some(
-    (o) => o.source === source && o.externalOrderId === externalOrderId
+    (o) => o.source === source && (o.externalOrderId === externalOrderId || o.externalOrderId === String(wcOrder.id))
   );
 
   if (isDuplicate) {

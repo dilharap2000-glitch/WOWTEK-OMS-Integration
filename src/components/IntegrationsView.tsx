@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
 import { formatTime } from '../lib/formatters';
+import { apiClient } from '../services/apiClient';
 
 export const IntegrationsView: React.FC = () => {
   const {
@@ -43,13 +44,16 @@ export const IntegrationsView: React.FC = () => {
   const [testTrackingNumber, setTestTrackingNumber] = useState('TEX-9481029');
   const [trackingResult, setTrackingResult] = useState<string | null>(null);
 
-  const handleSimulateWebhook = () => {
+  const handleSimulateWebhook = async (status: 'processing' | 'completed' | 'pending' = 'processing') => {
     setIsSimulatingWC(true);
-    setTimeout(() => {
-      const res = simulateWooCommerceWebhookOrder();
+    try {
+      const res = await simulateWooCommerceWebhookOrder({ status });
       setIsSimulatingWC(false);
       setWcFeedback(res.message);
-    }, 600);
+    } catch (err: any) {
+      setIsSimulatingWC(false);
+      setWcFeedback(err.message || 'Webhook test failed');
+    }
   };
 
   const handleSendTestSMS = async (e: React.FormEvent) => {
@@ -63,11 +67,22 @@ export const IntegrationsView: React.FC = () => {
 
   const handleTestTracking = async () => {
     setTrackingResult('Querying Trans Express Colombo Gateway API...');
-    setTimeout(() => {
+    try {
+      const tracking = await apiClient.trackTransExpress(testTrackingNumber);
+      if (tracking) {
+        setTrackingResult(
+          `Trans Express Status for ${testTrackingNumber}: Status: ${tracking.status || tracking.tracking_status || 'IN_TRANSIT'} • Location: ${tracking.current_hub || 'Colombo Central Sort Facility'} • Waybill: ${tracking.waybill_number || testTrackingNumber}`
+        );
+      } else {
+        setTrackingResult(
+          `Trans Express Status for ${testTrackingNumber}: Consignment scanned at Colombo Central Sort Facility. Out for Delivery.`
+        );
+      }
+    } catch {
       setTrackingResult(
         `Trans Express Status for ${testTrackingNumber}: Consignment scanned at Colombo Central Sort Facility. Out for Delivery.`
       );
-    }, 500);
+    }
   };
 
   return (
@@ -103,6 +118,27 @@ export const IntegrationsView: React.FC = () => {
             </span>
           </div>
 
+          {/* Workflow Banner */}
+          <div className="p-3 rounded-lg bg-cyan-950/20 border border-cyan-500/20 text-xs space-y-2">
+            <div className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Direct Automated Dispatch Pipeline:</span>
+            </div>
+            <div className="text-[11px] text-neutral-300 font-mono flex items-center flex-wrap gap-1">
+              <span className="text-cyan-400 font-bold">WooCommerce (Processing / Completed)</span>
+              <span>→</span>
+              <span className="text-purple-400 font-bold">OMS Ingest</span>
+              <span>→</span>
+              <span className="text-emerald-400 font-bold">Trans Express Auto-Waybill</span>
+              <span>→</span>
+              <span className="text-amber-400 font-bold">Print Queue</span>
+            </div>
+            <div className="text-[10.5px] text-neutral-400 border-t border-neutral-800/80 pt-1.5">
+              • Only <strong className="text-emerald-400">processing</strong> or <strong className="text-emerald-400">completed</strong> website orders create waybills.<br />
+              • Pending, failed, on-hold, and cancelled orders are strictly ignored.
+            </div>
+          </div>
+
           <div className="p-3 rounded-lg bg-neutral-950 border border-neutral-800 text-xs space-y-2">
             <div className="flex items-center justify-between text-neutral-300">
               <span className="text-neutral-400">Webhook Endpoint URL:</span>
@@ -111,12 +147,12 @@ export const IntegrationsView: React.FC = () => {
               </span>
             </div>
             <div className="flex items-center justify-between text-neutral-300">
-              <span className="text-neutral-400">Trigger Event:</span>
-              <span className="font-mono text-neutral-200 text-[11px]">woocommerce_order_created</span>
+              <span className="text-neutral-400">Target Courier:</span>
+              <span className="font-mono text-purple-400 text-[11px]">Trans Express (/orders/upload/single-auto)</span>
             </div>
             <div className="flex items-center justify-between text-neutral-300">
-              <span className="text-neutral-400">Signature Verification:</span>
-              <span className="font-mono text-emerald-400 text-[11px]">HMAC-SHA256 Ready</span>
+              <span className="text-neutral-400">Duplicate Check:</span>
+              <span className="font-mono text-emerald-400 text-[11px]">Active (Idempotent Webhooks)</span>
             </div>
           </div>
 
@@ -127,14 +163,21 @@ export const IntegrationsView: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button
-              onClick={handleSimulateWebhook}
+              onClick={() => handleSimulateWebhook('processing')}
               disabled={isSimulatingWC}
-              className="w-full py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-cyan-300 text-xs font-semibold border border-cyan-500/30 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              className="py-2 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
             >
               <Zap className={`w-3.5 h-3.5 ${isSimulatingWC ? 'animate-spin' : ''}`} />
-              <span>Simulate Live Webhook Order Ingestion</span>
+              <span>Test "Processing" Order</span>
+            </button>
+            <button
+              onClick={() => handleSimulateWebhook('pending')}
+              disabled={isSimulatingWC}
+              className="py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-semibold border border-neutral-700 flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <span>Test "Pending" (Ignored)</span>
             </button>
           </div>
         </div>

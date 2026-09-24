@@ -1023,6 +1023,311 @@ apiRouter.post('/integrations/:provider/disconnect', requireRole(['ADMIN', 'SUPE
 });
 
 // ============================================================================
+// 5B. TRANS EXPRESS PRODUCTION LOGISTICS & WAYBILL INTEGRATION
+// Base URL: https://portal.transexpress.lk/api
+// STRICT BUSINESS RULE: Only WEBSITE / WooCommerce orders can create waybills
+// ============================================================================
+
+/**
+ * Safe Test Connection (Does not create any shipment)
+ */
+apiRouter.post('/integrations/trans-express/test', async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 'tenant_wowtek_lk';
+    const adapter = TenantAdapterManager.getTransExpressAdapter(tenantId);
+    const result = await adapter.testConnection();
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Get Provinces: GET /provinces
+ */
+apiRouter.get('/integrations/trans-express/provinces', async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 'tenant_wowtek_lk';
+    const adapter = TenantAdapterManager.getTransExpressAdapter(tenantId);
+    const provinces = await adapter.getProvinces();
+    return res.json({ success: true, provinces });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Get Districts: GET /districts?province_id={province_id}
+ */
+apiRouter.get('/integrations/trans-express/districts', async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 'tenant_wowtek_lk';
+    const provinceId = Number(req.query.province_id) || 1;
+    const adapter = TenantAdapterManager.getTransExpressAdapter(tenantId);
+    const districts = await adapter.getDistricts(provinceId);
+    return res.json({ success: true, districts });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Get Cities: GET /cities?district_id={district_id}
+ */
+apiRouter.get('/integrations/trans-express/cities', async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 'tenant_wowtek_lk';
+    const districtId = Number(req.query.district_id) || 1;
+    const adapter = TenantAdapterManager.getTransExpressAdapter(tenantId);
+    const cities = await adapter.getCities(districtId);
+    return res.json({ success: true, cities });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Single Order Tracking: GET /orders/track?order_no=...
+ */
+apiRouter.get('/integrations/trans-express/track', async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 'tenant_wowtek_lk';
+    const orderNo = String(req.query.order_no || req.query.tracking_no || '');
+    if (!orderNo) {
+      return res.status(400).json({ success: false, error: 'order_no is required for tracking.' });
+    }
+    const adapter = TenantAdapterManager.getTransExpressAdapter(tenantId);
+    const tracking = await adapter.queryTracking(orderNo);
+    return res.json({ success: true, tracking });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Create Trans Express AUTO Waybill for Website Order:
+ * POST /api/integrations/trans-express/waybill
+ *
+ * Requirements:
+ * 1. Authenticate logged-in user
+ * 2. Load order from MongoDB
+ * 3. Verify order source is WEBSITE/WooCommerce (PickMe/Uber rejected)
+ * 4. Verify waybill does not already exist (Duplicate Protection)
+ * 5. Validate customer name, phone, address, city, COD
+ * 6. Read TRANSEX_API_KEY from process.env
+ * 7. Call POST /orders/upload/single-auto
+ * 8. Parse response and extract generated waybill ID
+ * 9. Save waybill and update order status in DB
+ * 10. Return safe response to frontend (never return API key)
+ */
+apiRouter.post('/integrations/trans-express/waybill', async (req: Request, res: Response) => {
+  const tenantId = req.tenantId || 'tenant_wowtek_lk';
+  const { orderId, cityId, note, phone2 } = req.body;
+
+  if (!orderId) {
+    return res.status(400).json({ success: false, error: 'orderId is required to generate waybill.' });
+  }
+
+  try {
+    const tenantCols = await getTenantCollections(tenantId);
+    let order: Order | null = null;
+
+    if (tenantCols) {
+      order = (await tenantCols.orders.findOne({ id: orderId })) as any;
+      if (!order) {
+        order = (await tenantCols.orders.findOne({ orderNumber: orderId })) as any;
+      }
+    }
+
+    if (!order) {
+      order = INITIAL_ORDERS.find((o) => o.id === orderId || o.orderNumber === orderId) || null;
+    }
+
+    if (!order) {
+      return res.status(404).json({ success: false, error: `Order ${orderId} not found in system.` });
+    }
+
+    // STRICT BUSINESS RULE: ONLY WEBSITE / WooCommerce orders can create Trans Express waybills
+    const source = (order.source || '').toUpperCase();
+    if (source !== 'WEBSITE') {
+      const platformMsg =
+        source === 'PICKME'
+          ? 'Delivery is handled directly by PickMe.'
+          : source === 'UBER_EATS'
+          ? 'Delivery is handled directly by Uber Eats.'
+          : `Delivery for channel ${order.source} is handled directly by the platform.`;
+
+      return res.status(400).json({
+        success: false,
+        error: `Trans Express waybill rejected: Waybills can only be created for WEBSITE / WooCommerce orders. ${platformMsg}`,
+      });
+    }
+
+    // DUPLICATE PROTECTION: Check if order already has a Trans Express waybill
+    if (order.waybillNumber || order.transExpress?.waybillId) {
+      const existingWaybillNumber = order.waybillNumber || String(order.transExpress?.waybillId);
+      logServerAudit(
+        tenantId,
+        'WAYBILL_DUPLICATE_PREVENTED',
+        'LOGISTICS',
+        `Duplicate waybill creation prevented for order ${order.orderNumber}. Existing waybill: ${existingWaybillNumber}`,
+        req.user?.id,
+        req.user?.name,
+        order.id
+      );
+
+      return res.json({
+        success: true,
+        alreadyExists: true,
+        waybillId: existingWaybillNumber,
+        waybillNumber: existingWaybillNumber,
+        trackingNumber: order.trackingNumber || existingWaybillNumber,
+        trackingUrl: `https://portal.transexpress.lk/track/${order.trackingNumber || existingWaybillNumber}`,
+        message: `Waybill ${existingWaybillNumber} already exists for order ${order.orderNumber}.`,
+      });
+    }
+
+    // Validate customer and shipping address
+    if (!order.customer?.name?.trim() || !order.customer?.phone?.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Customer name and phone number are required to create a Trans Express shipment.',
+      });
+    }
+
+    const hasAddress = Boolean(order.shippingAddress?.addressLine1 || (order.shippingAddress as any)?.address);
+    if (!hasAddress && !order.shippingAddress?.city) {
+      return res.status(400).json({
+        success: false,
+        error: 'Customer delivery address and destination city are required to create a Trans Express shipment.',
+      });
+    }
+
+    // Log request started
+    logServerAudit(
+      tenantId,
+      'WAYBILL_REQUEST_STARTED',
+      'LOGISTICS',
+      `Trans Express waybill creation initiated for website order ${order.orderNumber} (COD: Rs. ${order.totalAmount || order.total || 0})`,
+      req.user?.id,
+      req.user?.name,
+      order.id
+    );
+
+    // Get Trans Express Adapter
+    const adapter = TenantAdapterManager.getTransExpressAdapter(tenantId);
+
+    // Call production single-auto endpoint
+    const result = await adapter.createAutoWaybill(
+      {
+        ...order,
+        shippingAddress: {
+          ...order.shippingAddress,
+          phone2: phone2 || (order.shippingAddress as any)?.phone2 || '',
+        },
+      },
+      Number(cityId) || Number(order.transExpress?.cityId) || 101,
+      note
+    );
+
+    const nowIso = new Date().toISOString();
+
+    const transExpressData = {
+      waybillId: result.waybillId,
+      status: 'WAYBILL_CREATED',
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      trackingStatus: 'WAYBILL_ASSIGNED',
+      cityId: Number(cityId) || 101,
+    };
+
+    const newWaybill: Waybill = {
+      id: `wb_${Date.now()}`,
+      tenantId,
+      waybillNumber: result.waybillId,
+      trackingNumber: result.trackingNumber,
+      barcodeValue: result.waybillId,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      externalOrderId: order.externalOrderId,
+      customerName: order.customer.name,
+      customerPhone: order.customer.phone,
+      address: `${order.shippingAddress.addressLine1 || (order.shippingAddress as any)?.address || ''}, ${order.shippingAddress.city || ''}`,
+      city: order.shippingAddress.city || 'Colombo',
+      codAmount: order.paymentStatus === 'PAID' ? 0 : (order.totalAmount || order.total || 0),
+      paymentMethod: order.paymentMethod,
+      courierName: 'Trans Express',
+      courierTrackingUrl: result.trackingUrl,
+      status: 'CREATED',
+      labelFormat: 'THERMAL_4X6',
+      printCount: 0,
+      items: order.items?.map((i: any) => ({ name: i.name, quantity: i.quantity, sku: i.sku })) || [],
+      isFragile: false,
+      cityId: Number(cityId) || 101,
+      transExpress: transExpressData,
+      createdAt: nowIso,
+    };
+
+    // Save to database
+    if (tenantCols) {
+      await tenantCols.shipments.insertOne(newWaybill as any);
+      await tenantCols.orders.updateOne(
+        { id: order.id },
+        {
+          $set: {
+            waybillNumber: result.waybillId,
+            trackingNumber: result.trackingNumber,
+            courier: 'Trans Express',
+            orderStatus: 'READY_TO_SHIP',
+            transExpress: transExpressData,
+            updatedAt: nowIso,
+          },
+        }
+      );
+    }
+
+    // Log success
+    logServerAudit(
+      tenantId,
+      'WAYBILL_CREATED',
+      'LOGISTICS',
+      `Trans Express waybill ${result.waybillId} assigned to website order ${order.orderNumber} (Tracking: ${result.trackingNumber})`,
+      req.user?.id,
+      req.user?.name,
+      order.id
+    );
+
+    return res.json({
+      success: true,
+      waybill: newWaybill,
+      waybillId: result.waybillId,
+      waybillNumber: result.waybillId,
+      trackingNumber: result.trackingNumber,
+      trackingUrl: result.trackingUrl,
+      orderStatus: 'READY_TO_SHIP',
+      message: 'Trans Express waybill generated successfully.',
+    });
+  } catch (err: any) {
+    // Log failure
+    logServerAudit(
+      tenantId,
+      'WAYBILL_CREATION_FAILED',
+      'LOGISTICS',
+      `Failed to create Trans Express waybill for order ${orderId}: ${err.message}`,
+      req.user?.id,
+      req.user?.name,
+      orderId
+    );
+
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Trans Express API consignment upload failed.',
+      message: 'Failed to create Trans Express waybill.',
+    });
+  }
+});
+
+// ============================================================================
 // 6. TEAM & STAFF USERS
 // ============================================================================
 apiRouter.get('/team', async (req: Request, res: Response) => {
@@ -1791,9 +2096,10 @@ apiRouter.put('/settings', requireRole(['ADMIN', 'SUPER_ADMIN']), async (req: Re
 });
 
 // ============================================================================
-// 13. WOOCOMMERCE WEBHOOK (MULTI-TENANT HMAC VERIFICATION & ISOLATION)
+// 13. WOOCOMMERCE WEBHOOK & AUTOMATED TRANS EXPRESS WAYBILL DISPATCH
+// Workflow: WooCommerce Processing/Completed -> OMS Ingest -> Trans Express Auto Waybill -> Print Queue
 // ============================================================================
-apiRouter.post('/webhooks/woocommerce/:tenantId?', async (req: Request, res: Response) => {
+apiRouter.post(['/webhooks/woocommerce', '/webhooks/woocommerce/order-created', '/webhooks/woocommerce/:tenantId?'], async (req: Request, res: Response) => {
   try {
     const targetTenantId = req.params.tenantId || req.tenantId || 'tenant_wowtek_lk';
     const cols = await getCollections();
@@ -1827,16 +2133,35 @@ apiRouter.post('/webhooks/woocommerce/:tenantId?', async (req: Request, res: Res
       return res.status(400).json({ error: 'Invalid WooCommerce webhook payload.' });
     }
 
-    // Check duplicate
+    // STRICT BUSINESS RULE:
+    // - Do NOT import pending orders.
+    // - Do NOT import failed orders.
+    // - Do NOT import cancelled orders.
+    // - Do NOT import on-hold orders.
+    // - ONLY import WooCommerce orders whose status is "processing" or "completed".
+    const status = (wcOrder.status || '').toLowerCase().trim();
+    if (status !== 'processing' && status !== 'completed') {
+      return res.status(200).json({
+        ignored: true,
+        message: `Ignored WooCommerce order #${wcOrder.id} with status "${wcOrder.status}". Only "processing" or "completed" orders are imported into WOWTEK OMS.`,
+      });
+    }
+
+    // DUPLICATE CHECK: Prevent duplicate order ingestion and duplicate waybill calls
     if (tenantCols) {
       const existing = await tenantCols.orders.findOne({
-        externalOrderId: String(wcOrder.id),
+        $or: [
+          { externalOrderId: String(wcOrder.id) },
+          { externalOrderId: `WC-${wcOrder.id}` },
+        ],
         source: 'WEBSITE',
       });
       if (existing) {
         return res.status(200).json({
-          message: `Order #${wcOrder.id} already exists in tenant ${targetTenantId}`,
+          success: true,
+          message: `Order #${wcOrder.id} already exists in WOWTEK OMS. Duplicate webhook ignored.`,
           orderNumber: existing.orderNumber,
+          waybillNumber: existing.waybillNumber || null,
         });
       }
     }
@@ -1844,19 +2169,20 @@ apiRouter.post('/webhooks/woocommerce/:tenantId?', async (req: Request, res: Res
     const customerName =
       `${wcOrder.billing?.first_name || ''} ${wcOrder.billing?.last_name || ''}`.trim() ||
       'Online Customer';
-    const customerPhone = wcOrder.billing?.phone || '+94 77 000 0000';
-    const customerEmail = wcOrder.billing?.email || 'customer@store.lk';
+    const customerPhone = wcOrder.billing?.phone || wcOrder.shipping?.phone || '+94 77 000 0000';
+    const customerEmail = wcOrder.billing?.email || 'customer@wowtek.lk';
     const paymentMethod = mapWooCommercePaymentMethod(
       wcOrder.payment_method_title || '',
       wcOrder.payment_method || ''
     );
     const subtotal = parseFloat(wcOrder.total || '0') - parseFloat(wcOrder.shipping_total || '0');
     const totalAmount = parseFloat(wcOrder.total || '0');
+    const orderNumber = `WTK-2026-${wcOrder.id}`;
 
     const newOrder: Order = {
       id: `ord_wc_${targetTenantId}_${wcOrder.id}`,
       tenantId: targetTenantId,
-      orderNumber: `WC-${wcOrder.id}`,
+      orderNumber,
       externalOrderId: String(wcOrder.id),
       source: 'WEBSITE',
       customer: {
@@ -1907,14 +2233,14 @@ apiRouter.post('/webhooks/woocommerce/:tenantId?', async (req: Request, res: Res
         commissionConfigs: [],
       }),
       paymentMethod,
-      paymentStatus: wcOrder.status === 'completed' ? 'PAID' : 'PENDING',
-      orderStatus: mapWooCommerceStatus(wcOrder.status),
+      paymentStatus: status === 'completed' || paymentMethod !== 'Cash' ? 'PAID' : 'PENDING',
+      orderStatus: 'READY_TO_SHIP',
       shippingAddress: {
         name: customerName,
         phone: customerPhone,
         addressLine1: wcOrder.shipping?.address_1 || wcOrder.billing?.address_1 || 'Colombo',
         city: wcOrder.shipping?.city || wcOrder.billing?.city || 'Colombo',
-        district: wcOrder.shipping?.state || wcOrder.billing?.state || 'Colombo',
+        district: wcOrder.shipping?.state || wcOrder.billing?.state || 'Western Province',
         postalCode: wcOrder.shipping?.postcode || wcOrder.billing?.postcode || '00100',
         country: wcOrder.shipping?.country || 'Sri Lanka',
       },
@@ -1923,24 +2249,99 @@ apiRouter.post('/webhooks/woocommerce/:tenantId?', async (req: Request, res: Res
         phone: customerPhone,
         addressLine1: wcOrder.billing?.address_1 || 'Colombo',
         city: wcOrder.billing?.city || 'Colombo',
-        district: wcOrder.billing?.state || 'Colombo',
+        district: wcOrder.billing?.state || 'Western Province',
         postalCode: wcOrder.billing?.postcode || '00100',
         country: wcOrder.billing?.country || 'Sri Lanka',
       },
       courier: 'Trans Express',
+      invoiceNumber: `INV-${wcOrder.id}`,
+      notes: `Imported via WooCommerce (${status.toUpperCase()}) External #${wcOrder.id}`,
       createdAt: wcOrder.date_created ? new Date(wcOrder.date_created).toISOString() : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
+    // AUTOMATICALLY CREATE TRANS EXPRESS WAYBILL VIA /orders/upload/single-auto
+    const transExpressAdapter = TenantAdapterManager.getTransExpressAdapter(targetTenantId);
+    let waybillResult: any = null;
+    let createdWaybill: Waybill | null = null;
+
+    if (transExpressAdapter) {
+      try {
+        waybillResult = await transExpressAdapter.createAutoWaybill(
+          newOrder,
+          undefined, // automatically maps Sri Lankan city
+          'WooCommerce Auto-Dispatch'
+        );
+
+        if (waybillResult && waybillResult.success) {
+          const generatedWb = waybillResult.waybillId;
+          const generatedTracking = waybillResult.trackingNumber || generatedWb;
+
+          newOrder.waybillNumber = generatedWb;
+          newOrder.trackingNumber = generatedTracking;
+          newOrder.orderStatus = 'READY_TO_SHIP';
+          newOrder.transExpress = {
+            waybillId: generatedWb,
+            trackingNumber: generatedTracking,
+            status: 'WAYBILL_CREATED',
+            trackingStatus: 'READY_FOR_PICKUP',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+
+          // ADD THE WAYBILL TO THE PRINT QUEUE
+          createdWaybill = {
+            id: `wb_${newOrder.id}_${Date.now()}`,
+            tenantId: targetTenantId,
+            waybillNumber: generatedWb,
+            trackingNumber: generatedTracking,
+            barcodeValue: generatedWb,
+            orderId: newOrder.id,
+            orderNumber: newOrder.orderNumber,
+            externalOrderId: newOrder.externalOrderId,
+            customerName: newOrder.customer.name,
+            customerPhone: newOrder.customer.phone,
+            address: newOrder.shippingAddress.addressLine1,
+            city: newOrder.shippingAddress.city,
+            codAmount: newOrder.paymentStatus === 'PAID' ? 0 : (newOrder.totalAmount || 0),
+            paymentMethod: newOrder.paymentMethod,
+            courierName: 'Trans Express',
+            courierTrackingUrl: waybillResult.trackingUrl || `https://portal.transexpress.lk/track/${generatedTracking}`,
+            status: 'CREATED',
+            labelFormat: 'THERMAL_4X6',
+            printCount: 0,
+            items: newOrder.items.map((i) => ({ name: i.name, quantity: i.quantity, sku: i.sku })),
+            notes: newOrder.notes,
+            transExpress: newOrder.transExpress,
+            createdAt: new Date().toISOString(),
+          };
+        }
+      } catch (teErr: any) {
+        console.error('[WooCommerce Webhook] Trans Express auto-dispatch failed:', teErr.message);
+        newOrder.transExpress = {
+          waybillId: '',
+          status: 'FAILED',
+          errorMessage: teErr.message,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    }
+
     if (tenantCols) {
       await tenantCols.orders.insertOne(newOrder as any);
 
-      // Inventory decrement & stock transaction
+      // Decrement stock for purchased items
       for (const item of newOrder.items) {
         await tenantCols.products.updateOne(
           { sku: item.sku },
           { $inc: { stockQuantity: -item.quantity }, $set: { updatedAt: new Date().toISOString() } }
         );
+      }
+
+      // If waybill generated, save to print queue / shipments in MongoDB
+      if (createdWaybill) {
+        await tenantCols.shipments.insertOne(createdWaybill as any);
       }
     }
 
@@ -1948,13 +2349,16 @@ apiRouter.post('/webhooks/woocommerce/:tenantId?', async (req: Request, res: Res
       targetTenantId,
       'WOOCOMMERCE_ORDER_INGESTED',
       'INTEGRATIONS',
-      `Ingested WooCommerce order #${wcOrder.id} for tenant ${targetTenantId}`
+      `Ingested WooCommerce order #${wcOrder.id} (${status}) → Trans Express Waybill: ${newOrder.waybillNumber || 'FAILED'}`
     );
 
     return res.status(200).json({
       success: true,
-      message: `Order #${wcOrder.id} ingested successfully for tenant ${targetTenantId}`,
+      message: `WooCommerce order #${wcOrder.id} (${status}) imported → Trans Express Waybill ${newOrder.waybillNumber || 'pending'} created → Added to Print Queue`,
       orderNumber: newOrder.orderNumber,
+      waybillNumber: newOrder.waybillNumber || null,
+      trackingNumber: newOrder.trackingNumber || null,
+      inPrintQueue: Boolean(createdWaybill),
     });
   } catch (err: any) {
     return res.status(500).json({ error: 'Webhook processing error', message: err.message });

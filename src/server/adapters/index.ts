@@ -71,16 +71,13 @@ export class TenantAdapterManager {
   /**
    * Builds an active TransExpressAdapter
    */
-  static getTransExpressAdapter(tenantId: string, encryptedCredentials?: string): TransExpressAdapter | null {
-    if (!encryptedCredentials) return null;
-    const creds = decryptCredentials<TransExpressConfig>(encryptedCredentials);
-    if (!creds) return null;
+  static getTransExpressAdapter(tenantId: string, encryptedCredentials?: string): TransExpressAdapter {
+    const creds = encryptedCredentials ? decryptCredentials<TransExpressConfig>(encryptedCredentials) : null;
 
     return new TransExpressAdapter({
       tenantId,
-      merchantCode: creds.merchantCode,
-      apiKey: creds.apiKey,
-      accountId: creds.accountId,
+      merchantCode: creds?.merchantCode || 'WOWTEK',
+      apiKey: creds?.apiKey || process.env.TRANSEX_API_KEY || '',
     });
   }
 

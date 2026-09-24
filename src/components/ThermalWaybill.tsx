@@ -206,6 +206,18 @@ export const ThermalWaybill: React.FC<ThermalWaybillProps> = ({
             ORDER #{waybill.orderNumber}
           </div>
         </div>
+
+        {/* Optional delivery note */}
+        {(waybill.note || waybill.notes || order?.notes) && (
+          <div className="mt-0.5 text-[7.5px] font-bold text-black border-t border-dotted border-black/40 pt-0.5 flex items-start gap-1">
+            <span className="uppercase text-[7px] font-black bg-black text-white px-1 py-0.2 rounded-xs shrink-0">
+              NOTE
+            </span>
+            <span className="truncate flex-1">
+              {waybill.note || waybill.notes || order?.notes}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 4. PACKAGE CONTENTS & LINE ITEMS */}

@@ -23,6 +23,8 @@ import {
   Printer,
   Copy,
   Plus,
+  RotateCcw,
+  Loader2,
 } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
 import { ChannelSource, Order, OrderStatus } from '../types';
@@ -71,6 +73,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     generateInvoice,
     sendInvoiceToCustomer,
     createWaybill,
+    createTransExpressShipment,
     sendSMS,
     setPrintableInvoice,
     setPrintableWaybills,
@@ -84,6 +87,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const [activeChannel, setActiveChannel] = useState<ChannelSource | 'ALL'>('ALL');
   const [localSearch, setLocalSearch] = useState('');
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+  const [isSubmittingWaybill, setIsSubmittingWaybill] = useState(false);
 
   const query = (globalSearchQuery || localSearch).toLowerCase().trim();
 
@@ -137,13 +141,24 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     }
   };
 
-  const handleCreateShipment = (order: Order) => {
+  const handleCreateShipment = async (order: Order) => {
     if (order.source !== 'WEBSITE') {
       showFeedback(`Waybill / Trans Express shipment can only be created for WEBSITE orders.`);
       return;
     }
-    const wb = createWaybill(order.id, 'Trans Express', 'THERMAL_4X6');
-    showFeedback(`Trans Express shipment created! Waybill: ${wb.waybillNumber}`);
+    setIsSubmittingWaybill(true);
+    try {
+      const res = await createTransExpressShipment(order.id);
+      if (res.success) {
+        showFeedback(res.message || `Trans Express waybill generated! Consignment: ${res.waybill?.waybillNumber}`);
+      } else {
+        showFeedback(`Failed to create waybill: ${res.error || res.message}`);
+      }
+    } catch (err: any) {
+      showFeedback(`Error creating shipment: ${err.message}`);
+    } finally {
+      setIsSubmittingWaybill(false);
+    }
   };
 
   const handleMarkShipped = (order: Order) => {
@@ -607,21 +622,53 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     </div>
                   )}
                   {selectedOrder.waybillNumber ? (
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-neutral-400">Waybill Consignment:</span>
-                      <span className="font-mono text-purple-400 font-bold">
-                        {selectedOrder.waybillNumber}
-                      </span>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] bg-purple-950/30 p-2 rounded-lg border border-purple-800/40">
+                        <span className="text-neutral-400">Waybill Consignment:</span>
+                        <span className="font-mono text-purple-300 font-bold">
+                          {selectedOrder.waybillNumber}
+                        </span>
+                      </div>
+                      {selectedOrder.trackingNumber && (
+                        <div className="flex items-center justify-between text-[11px] px-2">
+                          <span className="text-neutral-400">Tracking Number:</span>
+                          <a
+                            href={`https://portal.transexpress.lk/track/${selectedOrder.trackingNumber}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-cyan-400 hover:underline font-mono text-[10px] flex items-center gap-1"
+                          >
+                            {selectedOrder.trackingNumber} <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="mt-2 flex items-center justify-between text-[11px] bg-neutral-950 p-2 rounded-lg border border-neutral-800">
-                      <span className="text-neutral-400">Trans Express Waybill:</span>
-                      <button
-                        onClick={() => handleCreateShipment(selectedOrder)}
-                        className="px-2.5 py-1 rounded bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-bold text-[10px] flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3 h-3" /> Create Consignment
-                      </button>
+                    <div className="mt-2 text-[11px] bg-neutral-950 p-2.5 rounded-lg border border-neutral-800 space-y-2">
+                      {selectedOrder.transExpress?.errorMessage && (
+                        <div className="text-[10px] text-rose-400 bg-rose-950/40 p-2 rounded border border-rose-800/40 leading-tight">
+                          ⚠️ Waybill error: {selectedOrder.transExpress.errorMessage}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Trans Express Waybill:</span>
+                        <button
+                          disabled={isSubmittingWaybill}
+                          onClick={() => handleCreateShipment(selectedOrder)}
+                          className="px-2.5 py-1.5 rounded bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold text-[10px] flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
+                        >
+                          {isSubmittingWaybill ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : selectedOrder.transExpress?.errorMessage ? (
+                            <RotateCcw className="w-3 h-3" />
+                          ) : (
+                            <Plus className="w-3 h-3" />
+                          )}
+                          <span>
+                            {selectedOrder.transExpress?.errorMessage ? 'Retry Waybill' : 'Create Waybill'}
+                          </span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </>
@@ -631,7 +678,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   <div>
                     <div className="font-bold">Delivery handled by PickMe</div>
                     <div className="text-[10px] text-amber-400/80">
-                      Courier waybill and Trans Express shipment creation are disabled.
+                      PickMe handles delivery. Waybill and Trans Express shipment controls are disabled.
                     </div>
                   </div>
                 </div>
@@ -639,9 +686,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
                   <Truck className="w-4 h-4 text-emerald-400 shrink-0" />
                   <div>
-                    <div className="font-bold">Delivery handled by Uber</div>
+                    <div className="font-bold">Delivery handled by Uber Eats</div>
                     <div className="text-[10px] text-emerald-400/80">
-                      Courier waybill and Trans Express shipment creation are disabled.
+                      Uber handles delivery. Waybill and Trans Express shipment controls are disabled.
                     </div>
                   </div>
                 </div>
@@ -715,23 +762,52 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
               {/* Waybill / Trans Express Actions — ONLY FOR WEBSITE / WOOCOMMERCE */}
               {selectedOrder.source === 'WEBSITE' ? (
-                <div className="pt-2 border-t border-neutral-800">
+                <div className="pt-2 border-t border-neutral-800 space-y-2">
                   {selectedOrder.waybillNumber ? (
-                    <button
-                      onClick={() => handlePrintWaybill(selectedOrder)}
-                      className="w-full p-2.5 rounded-lg bg-purple-950/50 hover:bg-purple-900/60 text-purple-200 text-xs font-semibold flex items-center justify-center gap-2 border border-purple-500/40 transition-colors cursor-pointer"
-                    >
-                      <Printer className="w-4 h-4 text-purple-400" />
-                      <span>Print Thermal Waybill (100×150mm)</span>
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => handlePrintWaybill(selectedOrder)}
+                        className="w-full p-2.5 rounded-lg bg-purple-950/50 hover:bg-purple-900/60 text-purple-200 text-xs font-semibold flex items-center justify-center gap-2 border border-purple-500/40 transition-colors cursor-pointer"
+                      >
+                        <Printer className="w-4 h-4 text-purple-400" />
+                        <span>Print Thermal Waybill (100×150mm)</span>
+                      </button>
+                      <a
+                        href={`https://portal.transexpress.lk/track/${selectedOrder.trackingNumber || selectedOrder.waybillNumber}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full p-2 rounded-lg bg-neutral-950 hover:bg-neutral-800 text-cyan-400 text-xs font-semibold flex items-center justify-center gap-1.5 border border-neutral-800 transition-colors cursor-pointer"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Track on Trans Express Portal</span>
+                      </a>
+                    </div>
                   ) : (
-                    <button
-                      onClick={() => handleCreateShipment(selectedOrder)}
-                      className="w-full p-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Create Waybill (Trans Express)</span>
-                    </button>
+                    <div className="space-y-1.5">
+                      {selectedOrder.transExpress?.errorMessage && (
+                        <div className="text-[11px] text-rose-400 bg-rose-950/30 p-2 rounded-lg border border-rose-900/50 leading-tight">
+                          ⚠️ Waybill Creation Error: {selectedOrder.transExpress.errorMessage}
+                        </div>
+                      )}
+                      <button
+                        disabled={isSubmittingWaybill}
+                        onClick={() => handleCreateShipment(selectedOrder)}
+                        className="w-full p-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
+                      >
+                        {isSubmittingWaybill ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : selectedOrder.transExpress?.errorMessage ? (
+                          <RotateCcw className="w-4 h-4" />
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
+                        <span>
+                          {selectedOrder.transExpress?.errorMessage
+                            ? 'Retry Trans Express Waybill'
+                            : 'Create Waybill (Trans Express)'}
+                        </span>
+                      </button>
+                    </div>
                   )}
                 </div>
               ) : selectedOrder.source === 'PICKME' ? (
@@ -740,7 +816,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   <div className="flex-1">
                     <div className="font-bold">Delivery handled by PickMe</div>
                     <div className="text-[10px] text-amber-400/80">
-                      Courier waybill and Trans Express shipment creation are disabled.
+                      PickMe handles delivery. Waybill and Trans Express shipment controls are disabled.
                     </div>
                   </div>
                 </div>
@@ -748,9 +824,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
                   <Truck className="w-4 h-4 text-emerald-400 shrink-0" />
                   <div className="flex-1">
-                    <div className="font-bold">Delivery handled by Uber</div>
+                    <div className="font-bold">Delivery handled by Uber Eats</div>
                     <div className="text-[10px] text-emerald-400/80">
-                      Courier waybill and Trans Express shipment creation are disabled.
+                      Uber handles delivery. Waybill and Trans Express shipment controls are disabled.
                     </div>
                   </div>
                 </div>

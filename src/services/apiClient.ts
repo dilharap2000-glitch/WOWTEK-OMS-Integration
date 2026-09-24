@@ -27,6 +27,9 @@ import {
   SuperAdminMetrics,
   SystemIntegrations,
   IntegrationProvider,
+  TransExpressProvince,
+  TransExpressDistrict,
+  TransExpressCity,
 } from '../types';
 
 export interface HealthResponse {
@@ -463,6 +466,85 @@ class APIClient {
   async getShipments(): Promise<Waybill[]> {
     const res = await this.request<{ success: boolean; shipments: Waybill[] }>('/shipments');
     return res.success && res.data?.shipments ? res.data.shipments : [];
+  }
+
+  // Trans Express Logistics API Methods
+  async createTransExpressWaybill(params: {
+    orderId: string;
+    cityId?: number;
+    note?: string;
+    phone2?: string;
+  }): Promise<{
+    success: boolean;
+    alreadyExists?: boolean;
+    waybill?: Waybill;
+    waybillId?: string;
+    waybillNumber?: string;
+    trackingNumber?: string;
+    trackingUrl?: string;
+    orderStatus?: string;
+    message?: string;
+    error?: string;
+  }> {
+    const res = await this.request<{
+      success: boolean;
+      alreadyExists?: boolean;
+      waybill?: Waybill;
+      waybillId?: string;
+      waybillNumber?: string;
+      trackingNumber?: string;
+      trackingUrl?: string;
+      orderStatus?: string;
+      message?: string;
+      error?: string;
+    }>('/integrations/trans-express/waybill', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+
+    if (res.success && res.data) {
+      return res.data;
+    }
+    return {
+      success: false,
+      error: res.error || 'Failed to create Trans Express waybill',
+    };
+  }
+
+  async getTransExpressProvinces(): Promise<TransExpressProvince[]> {
+    const res = await this.request<{ success: boolean; provinces: TransExpressProvince[] }>(
+      '/integrations/trans-express/provinces'
+    );
+    return res.success && res.data?.provinces ? res.data.provinces : [];
+  }
+
+  async getTransExpressDistricts(provinceId: number): Promise<TransExpressDistrict[]> {
+    const res = await this.request<{ success: boolean; districts: TransExpressDistrict[] }>(
+      `/integrations/trans-express/districts?province_id=${provinceId}`
+    );
+    return res.success && res.data?.districts ? res.data.districts : [];
+  }
+
+  async getTransExpressCities(districtId: number): Promise<TransExpressCity[]> {
+    const res = await this.request<{ success: boolean; cities: TransExpressCity[] }>(
+      `/integrations/trans-express/cities?district_id=${districtId}`
+    );
+    return res.success && res.data?.cities ? res.data.cities : [];
+  }
+
+  async testTransExpress(): Promise<{ success: boolean; message: string; provincesCount?: number }> {
+    const res = await this.request<{ success: boolean; message: string; provincesCount?: number }>(
+      '/integrations/trans-express/test',
+      { method: 'POST' }
+    );
+    return res.success && res.data ? res.data : { success: false, message: res.error || 'Test failed' };
+  }
+
+  async trackTransExpress(orderNoOrWaybill: string): Promise<any> {
+    const res = await this.request<{ success: boolean; tracking: any }>(
+      `/integrations/trans-express/track?order_no=${encodeURIComponent(orderNoOrWaybill)}`
+    );
+    return res.success && res.data ? res.data.tracking : null;
   }
 
   async getInvoices(): Promise<Invoice[]> {

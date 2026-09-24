@@ -192,6 +192,37 @@ export interface ProfitBreakdown {
   profitMargin: number;         // (netProfit / netRevenue) * 100
 }
 
+export interface TransExpressShipmentData {
+  waybillId: string | number;
+  trackingNumber?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  trackingStatus?: string;
+  errorMessage?: string;
+  cityId?: number | string;
+  districtId?: number | string;
+  provinceId?: number | string;
+}
+
+export interface TransExpressProvince {
+  id: number;
+  name: string;
+}
+
+export interface TransExpressDistrict {
+  id: number;
+  name: string;
+  province_id: number;
+}
+
+export interface TransExpressCity {
+  id: number;
+  name: string;
+  district_id: number;
+  postcode?: string;
+}
+
 export interface Order {
   id: string;
   tenantId?: string;             // Mandatory tenant isolation
@@ -223,6 +254,7 @@ export interface Order {
   waybillNumber?: string;
   invoiceNumber?: string;
   notes?: string;
+  transExpress?: TransExpressShipmentData;
   createdAt: string;
   updatedAt: string;
   confirmedAt?: string;
@@ -400,6 +432,9 @@ export interface Waybill {
   items?: { name: string; quantity: number; sku?: string }[];
   isFragile?: boolean;
   notes?: string;
+  note?: string;
+  cityId?: number | string;
+  transExpress?: TransExpressShipmentData;
   createdAt: string;
 }
 

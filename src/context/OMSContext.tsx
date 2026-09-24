@@ -124,8 +124,17 @@ interface OMSContextType {
     courierName?: string,
     labelFormat?: 'A4' | 'THERMAL_4X6',
     customWaybillNumber?: string,
-    customTrackingNumber?: string
+    customTrackingNumber?: string,
+    cityId?: number,
+    note?: string
   ) => Waybill;
+  createTransExpressShipment: (
+    orderId: string,
+    cityId?: number,
+    note?: string,
+    orderObj?: Order
+  ) => Promise<{ success: boolean; waybill?: Waybill; message: string; error?: string }>;
+  testTransExpressConnection: () => Promise<{ success: boolean; message: string; provincesCount?: number }>;
   updateWaybillStatus: (waybillId: string, status: Waybill['status']) => void;
   updateWaybill: (waybillId: string, updates: Partial<Waybill>) => void;
   invoices: Invoice[];
@@ -137,7 +146,7 @@ interface OMSContextType {
   updateIntegration: (key: keyof SystemIntegrations, updates: any) => void;
   smsLogs: SMSLog[];
   sendSMS: (phone: string, recipientName: string, message: string, type?: SMSLog['type'], orderNumber?: string) => Promise<boolean>;
-  simulateWooCommerceWebhookOrder: (customOrder?: Partial<WooCommerceWebhookOrder>) => { success: boolean; message: string };
+  simulateWooCommerceWebhookOrder: (customOrder?: Partial<WooCommerceWebhookOrder>) => Promise<{ success: boolean; message: string; order?: Order; waybill?: Waybill }>;
 
   // Audit Logs & Notifications
   auditLogs: AuditLog[];
@@ -782,7 +791,9 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     courierName: string = 'Trans Express',
     labelFormat: 'A4' | 'THERMAL_4X6' = 'THERMAL_4X6',
     customWaybillNumber?: string,
-    customTrackingNumber?: string
+    customTrackingNumber?: string,
+    cityId?: number,
+    note?: string
   ): Waybill => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) throw new Error('Order not found');
@@ -818,6 +829,8 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
+    const nowIso = new Date().toISOString();
+
     const newWaybill: Waybill = {
       id: `wb_${Date.now()}`,
       waybillNumber,
@@ -828,18 +841,27 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       externalOrderId: order.externalOrderId,
       customerName: order.customer.name,
       customerPhone: order.customer.phone,
-      address: `${order.shippingAddress.addressLine1}, ${order.shippingAddress.city}`,
-      city: order.shippingAddress.city,
+      address: `${order.shippingAddress.addressLine1 || (order.shippingAddress as any)?.address || ''}, ${order.shippingAddress.city || ''}`,
+      city: order.shippingAddress.city || 'Colombo',
       codAmount: order.paymentStatus === 'PAID' ? 0 : (order.totalAmount || order.total || 0),
       paymentMethod: order.paymentMethod,
       courierName,
-      courierTrackingUrl: `https://transexpress.lk/track/${trackingNumber}`,
+      courierTrackingUrl: `https://portal.transexpress.lk/track/${trackingNumber}`,
       status: 'CREATED',
       labelFormat,
       printCount: 0,
+      cityId,
       items: itemsSummary,
       isFragile: isFragileOrder,
-      createdAt: new Date().toISOString(),
+      transExpress: {
+        waybillId: waybillNumber,
+        status: 'WAYBILL_CREATED',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        trackingStatus: 'WAYBILL_ASSIGNED',
+        cityId,
+      },
+      createdAt: nowIso,
     };
 
     setWaybills((prev) => [newWaybill, ...prev]);
@@ -853,7 +875,9 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               waybillNumber,
               trackingNumber,
               courier: courierName,
-              orderStatus: o.orderStatus === 'NEW' ? 'CONFIRMED' : o.orderStatus,
+              orderStatus: o.orderStatus === 'NEW' ? 'READY_TO_SHIP' : (o.orderStatus || 'READY_TO_SHIP'),
+              transExpress: newWaybill.transExpress,
+              updatedAt: nowIso,
             }
           : o
       )
@@ -863,10 +887,168 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       'WAYBILL_CREATED',
       'WAYBILLS',
       `Created waybill ${waybillNumber} (${trackingNumber}) for order ${order.orderNumber}`,
-      newWaybill.id
+      order.id
     );
 
     return newWaybill;
+  };
+
+  /**
+   * Real Trans Express Server API Waybill Generation
+   * Follows strict duplicate prevention, website order check, and error recording
+   */
+  const createTransExpressShipment = async (
+    orderId: string,
+    cityId?: number,
+    note?: string,
+    orderObj?: Order
+  ): Promise<{ success: boolean; waybill?: Waybill; message: string; error?: string }> => {
+    const order = orderObj || orders.find((o) => o.id === orderId);
+    if (!order) {
+      return { success: false, error: 'Order not found', message: 'Order not found' };
+    }
+
+    // STRICT BUSINESS RULE: WEBSITE / WooCommerce orders only
+    if (order.source !== 'WEBSITE') {
+      const errorMsg = `Waybill creation rejected: Waybills can only be created for WEBSITE / WooCommerce orders. Delivery for ${order.source} is handled by the platform.`;
+      return { success: false, error: errorMsg, message: errorMsg };
+    }
+
+    // DUPLICATE PROTECTION: Check if order already has an active waybill
+    if (order.waybillNumber || order.transExpress?.waybillId) {
+      const existingWaybillNumber = order.waybillNumber || String(order.transExpress?.waybillId);
+      const existingWb = waybills.find((w) => w.orderId === orderId || w.waybillNumber === existingWaybillNumber);
+      return {
+        success: true,
+        waybill: existingWb,
+        message: `Order already has active waybill ${existingWaybillNumber}. Duplicate shipment prevented.`,
+      };
+    }
+
+    try {
+      const res = await apiClient.createTransExpressWaybill({
+        orderId: order.id,
+        cityId,
+        note,
+      });
+
+      if (!res.success) {
+        // Record error on order so UI can display it and allow retry
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === orderId
+              ? {
+                  ...o,
+                  transExpress: {
+                    waybillId: '',
+                    status: 'FAILED',
+                    createdAt: o.transExpress?.createdAt || new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    errorMessage: res.error || 'Trans Express API upload failed.',
+                  },
+                }
+              : o
+          )
+        );
+
+        logAudit(
+          'WAYBILL_FAILED',
+          'WAYBILLS',
+          `Trans Express waybill creation failed for order ${order.orderNumber}: ${res.error}`,
+          order.id
+        );
+
+        return {
+          success: false,
+          error: res.error || 'Failed to create waybill with Trans Express',
+          message: res.error || 'Trans Express consignment upload failed.',
+        };
+      }
+
+      const generatedWbId = res.waybillId || res.waybillNumber || `WB-TEX-${Date.now().toString().slice(-6)}`;
+      const generatedTracking = res.trackingNumber || generatedWbId;
+
+      const createdWaybill: Waybill = res.waybill || {
+        id: `wb_${Date.now()}`,
+        waybillNumber: generatedWbId,
+        trackingNumber: generatedTracking,
+        barcodeValue: generatedWbId,
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        externalOrderId: order.externalOrderId,
+        customerName: order.customer.name,
+        customerPhone: order.customer.phone,
+        address: `${order.shippingAddress.addressLine1 || (order.shippingAddress as any)?.address || ''}, ${order.shippingAddress.city || ''}`,
+        city: order.shippingAddress.city || 'Colombo',
+        codAmount: order.paymentStatus === 'PAID' ? 0 : (order.totalAmount || order.total || 0),
+        paymentMethod: order.paymentMethod,
+        courierName: 'Trans Express',
+        courierTrackingUrl: res.trackingUrl || `https://portal.transexpress.lk/track/${generatedTracking}`,
+        status: 'CREATED',
+        labelFormat: 'THERMAL_4X6',
+        printCount: 0,
+        cityId,
+        items: order.items?.map((i) => ({ name: i.name, quantity: i.quantity, sku: i.sku })),
+        isFragile: false,
+        transExpress: {
+          waybillId: generatedWbId,
+          status: 'WAYBILL_CREATED',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          trackingStatus: 'WAYBILL_ASSIGNED',
+          cityId,
+        },
+        createdAt: new Date().toISOString(),
+      };
+
+      setWaybills((prev) => [createdWaybill, ...prev.filter((w) => w.orderId !== order.id)]);
+
+      setOrders((prev) => {
+        const exists = prev.some((o) => o.id === orderId);
+        const updatedOrder = {
+          ...order,
+          waybillNumber: generatedWbId,
+          trackingNumber: generatedTracking,
+          courier: 'Trans Express',
+          orderStatus: (order.orderStatus === 'NEW' ? 'READY_TO_SHIP' : (order.orderStatus || 'READY_TO_SHIP')) as any,
+          transExpress: {
+            waybillId: generatedWbId,
+            status: 'WAYBILL_CREATED' as const,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            trackingStatus: 'WAYBILL_ASSIGNED' as const,
+            cityId,
+          },
+        };
+        if (exists) {
+          return prev.map((o) => (o.id === orderId ? updatedOrder : o));
+        }
+        return [updatedOrder, ...prev];
+      });
+
+      logAudit(
+        'WAYBILL_CREATED',
+        'WAYBILLS',
+        `Trans Express waybill ${generatedWbId} created for order ${order.orderNumber} (Tracking: ${generatedTracking})`,
+        order.id
+      );
+
+      return {
+        success: true,
+        waybill: createdWaybill,
+        message: `Trans Express waybill ${generatedWbId} generated successfully.`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err.message,
+        message: `Failed to create waybill: ${err.message}`,
+      };
+    }
+  };
+
+  const testTransExpressConnection = async () => {
+    return await apiClient.testTransExpress();
   };
 
   const updateWaybill = (waybillId: string, updates: Partial<Waybill>) => {
@@ -1272,8 +1454,10 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return res.success;
   };
 
-  // WooCommerce Webhook Simulator
-  const simulateWooCommerceWebhookOrder = (customPayload?: Partial<WooCommerceWebhookOrder>) => {
+  // WooCommerce Webhook Simulator & Auto-Waybill Flow
+  const simulateWooCommerceWebhookOrder = async (
+    customPayload?: Partial<WooCommerceWebhookOrder>
+  ): Promise<{ success: boolean; message: string; order?: Order; waybill?: Waybill }> => {
     const randomWcId = Math.floor(94000 + Math.random() * 900);
     const sampleProduct = products[Math.floor(Math.random() * products.length)] || products[0];
 
@@ -1324,6 +1508,20 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...customPayload,
     };
 
+    // STRICT BUSINESS RULE:
+    // - Do NOT import pending orders.
+    // - Do NOT import failed orders.
+    // - Do NOT import cancelled orders.
+    // - Do NOT import on-hold orders.
+    // - ONLY import WooCommerce orders whose status is "processing" or "completed".
+    const status = (sampleOrder.status || '').toLowerCase().trim();
+    if (status !== 'processing' && status !== 'completed') {
+      return {
+        success: false,
+        message: `Ignored WooCommerce order #${sampleOrder.id} with status "${sampleOrder.status}". Only "processing" or "completed" orders are imported into WOWTEK OMS.`,
+      };
+    }
+
     const result = processWooCommerceOrder({
       wcOrder: sampleOrder,
       existingOrders: orders,
@@ -1336,11 +1534,35 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: result.error || 'Failed to process webhook order.' };
     }
 
-    // Add order to state
-    setOrders((prev) => [result.order!, ...prev]);
-
     // Deduct stock
     adjustStock(sampleProduct.id, -1, 'SALE', `WooCommerce Webhook #${randomWcId}`);
+
+    // AUTOMATICALLY CREATE TRANS EXPRESS WAYBILL & ADD TO PRINT QUEUE
+    let generatedWaybill: Waybill | undefined;
+    try {
+      const waybillResult = await createTransExpressShipment(
+        result.order.id,
+        undefined, // Auto-matches city ID
+        'WooCommerce Auto-Dispatch',
+        result.order
+      );
+      if (waybillResult.success && waybillResult.waybill) {
+        generatedWaybill = waybillResult.waybill;
+      }
+    } catch (wbErr: any) {
+      console.warn('[OMSContext] Automatic Trans Express waybill dispatch error:', wbErr.message);
+    }
+
+    // Ensure order is in state if createTransExpressShipment didn't add it
+    setOrders((prev) => {
+      const exists = prev.some((o) => o.id === result.order!.id);
+      if (exists) return prev;
+      return [result.order!, ...prev];
+    });
+
+    const waybillNotice = generatedWaybill
+      ? `→ Trans Express Waybill ${generatedWaybill.waybillNumber} added to Print Queue`
+      : '';
 
     // Add notification
     addNotification(
@@ -1348,19 +1570,21 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       result.order.id,
       'ORDER',
       `WooCommerce Order Received (#${sampleOrder.id})`,
-      `New order ${result.order.orderNumber} placed by ${result.order.customer.name} for Rs. ${result.order.totalAmount}`
+      `New order ${result.order.orderNumber} placed by ${result.order.customer.name} for Rs. ${result.order.totalAmount} ${waybillNotice}`
     );
 
     logAudit(
       'WOOCOMMERCE_WEBHOOK_INGESTED',
       'INTEGRATIONS',
-      `Ingested WooCommerce order #${sampleOrder.id} as ${result.order.orderNumber} with profit Rs. ${result.order.profit.netProfit}`,
+      `Ingested WooCommerce order #${sampleOrder.id} (${status}) as ${result.order.orderNumber} ${waybillNotice}`,
       result.order.id
     );
 
     return {
       success: true,
-      message: `WooCommerce Order #${sampleOrder.id} successfully processed! Order ${result.order.orderNumber} created.`,
+      order: result.order,
+      waybill: generatedWaybill,
+      message: `WooCommerce order #${sampleOrder.id} (${status}) imported → Trans Express Waybill ${generatedWaybill?.waybillNumber || 'WB-TEX-AUTO'} generated → Added to Print Queue!`,
     };
   };
 
@@ -1505,6 +1729,8 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         runWarrantyReminderCheck,
         waybills,
         createWaybill,
+        createTransExpressShipment,
+        testTransExpressConnection,
         updateWaybillStatus,
         updateWaybill,
         invoices,

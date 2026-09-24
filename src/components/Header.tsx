@@ -61,14 +61,17 @@ export const Header: React.FC<HeaderProps> = ({
 
   const unreadNotifs = notifications.filter((n) => !n.isRead);
 
-  const handleSimulateWooCommerce = () => {
+  const handleSimulateWooCommerce = async () => {
     setIsSimulatingWc(true);
-    setTimeout(() => {
-      const res = simulateWooCommerceWebhookOrder();
+    try {
+      const res = await simulateWooCommerceWebhookOrder();
       setIsSimulatingWc(false);
       setWcToast(res.message);
       setTimeout(() => setWcToast(null), 5000);
-    }, 600);
+    } catch (err: any) {
+      setIsSimulatingWc(false);
+      setWcToast(err.message || 'Webhook simulation error');
+    }
   };
 
   const dateFilterOptions: { value: DateFilterType; label: string }[] = [
