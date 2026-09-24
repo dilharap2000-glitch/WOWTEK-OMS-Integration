@@ -79,13 +79,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectOrder, onN
   const pieData = dashboardMetrics.salesByChannel
     .filter((i) => i.sales > 0)
     .map((item) => ({
-      name: CHANNEL_NAMES[item.channel].split(' ')[0],
+      name: (CHANNEL_NAMES[item.channel] || item.channel || '').split(' ')[0] || item.channel,
       value: item.sales,
-      color: CHANNEL_COLORS[item.channel],
+      color: CHANNEL_COLORS[item.channel] || '#06b6d4',
     }));
 
   const recentOrders = [...orders]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    })
     .slice(0, 6);
 
   return (
@@ -102,7 +106,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectOrder, onN
             </span>
           </div>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Operations summary for WOWTEK Colombo Central Hub • Filtering: <span className="text-cyan-400 font-semibold capitalize">{dateFilter.replace('_', ' ')}</span>
+            Operations summary for WOWTEK Colombo Central Hub • Filtering: <span className="text-cyan-400 font-semibold capitalize">{(dateFilter || 'today').replace(/_/g, ' ')}</span>
           </p>
         </div>
 
@@ -462,7 +466,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectOrder, onN
                             : 'bg-neutral-800 text-neutral-400 border-neutral-700'
                         }`}
                       >
-                        {order.orderStatus.replace('_', ' ')}
+                        {(order.orderStatus || 'PENDING').replace(/_/g, ' ')}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">

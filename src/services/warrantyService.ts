@@ -32,15 +32,23 @@ export function calculateExpiryDate(
 }
 
 export function evaluateWarrantyStatus(
-  expiryDateStr: string,
+  expiryDateStr?: string | null,
   existingStatus?: WarrantyStatus | string
 ): { status: WarrantyStatus; daysRemaining: number } {
   if (existingStatus === 'CLAIMED') {
     return { status: 'CLAIMED', daysRemaining: 0 };
   }
 
+  if (!expiryDateStr) {
+    return { status: 'ACTIVE', daysRemaining: 365 };
+  }
+
   const now = new Date();
   const expiry = new Date(expiryDateStr);
+  if (isNaN(expiry.getTime())) {
+    return { status: 'ACTIVE', daysRemaining: 365 };
+  }
+
   const diffTime = expiry.getTime() - now.getTime();
   const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 

@@ -60,7 +60,7 @@ export class WooCommerceAdapter {
     return {
       success: true,
       message: `Tenant adapter ready for ${this.config.storeUrl} (Tenant: ${this.config.tenantId})`,
-      storeName: this.config.storeUrl.replace(/^https?:\/\//, '').split('/')[0],
+      storeName: (this.config.storeUrl || '').replace(/^https?:\/\//, '').split('/')[0] || 'WooCommerce Store',
     };
   }
 

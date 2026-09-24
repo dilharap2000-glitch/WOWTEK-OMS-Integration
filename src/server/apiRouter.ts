@@ -447,11 +447,11 @@ apiRouter.post('/superadmin/tenants', requireRole(['SUPER_ADMIN']), async (req: 
       return res.status(400).json({ error: 'businessName and email are required.' });
     }
 
-    const businessSlug = businessName
+    const businessSlug = (businessName || 'store')
       .toLowerCase()
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+      .replace(/^-|-$/g, '') || 'store';
     const tenantId = `tenant_${businessSlug.replace(/-/g, '_')}_${Date.now().toString().slice(-4)}`;
     const now = new Date().toISOString();
     const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
@@ -1368,7 +1368,7 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
       }
 
       // Auto-generate invoice
-      const invoiceNumber = `INV-${newOrder.orderNumber.replace(/[^a-zA-Z0-9]/g, '')}`;
+      const invoiceNumber = `INV-${(newOrder.orderNumber || '').replace(/[^a-zA-Z0-9]/g, '') || Date.now().toString().slice(-4)}`;
       await tenantCols.invoices.insertOne({
         id: `inv_${Date.now()}`,
         tenantId,

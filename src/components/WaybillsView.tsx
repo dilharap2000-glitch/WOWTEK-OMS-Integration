@@ -547,7 +547,7 @@ export const WaybillsView: React.FC = () => {
                   value={
                     useManualNumber && manualWaybillNumber.trim()
                       ? manualWaybillNumber.trim()
-                      : `WB-TEX-2026-${activeCreateOrder?.orderNumber.replace(/[^0-9]/g, '') || '9041'}`
+                      : `WB-TEX-2026-${(activeCreateOrder?.orderNumber || '').replace(/[^0-9]/g, '') || '9041'}`
                   }
                   height={38}
                   width={1.6}

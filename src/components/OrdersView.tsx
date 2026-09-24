@@ -396,7 +396,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                                   : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
                               }`}
                             >
-                              {order.orderStatus.replace('_', ' ')}
+                              {(order.orderStatus || 'PENDING').replace(/_/g, ' ')}
                             </span>
                           </td>
 

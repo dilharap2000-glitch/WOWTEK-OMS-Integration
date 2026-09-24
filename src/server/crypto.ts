@@ -117,7 +117,7 @@ export function generateTenantWebhookSecret(tenantSlug = 'ten'): string {
  * Generates unique tenant identifier
  */
 export function generateTenantId(slug: string): string {
-  const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 16);
+  const cleanSlug = (slug || 'tenant').toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 16);
   const randomHex = crypto.randomBytes(4).toString('hex');
   return `tnt_${cleanSlug}_${randomHex}`;
 }

@@ -302,7 +302,7 @@ export const WarrantyView: React.FC = () => {
                             : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
                         }`}
                       >
-                        {status.replace('_', ' ')}
+                        {(status || 'ACTIVE').replace(/_/g, ' ')}
                       </span>
                     </td>
 

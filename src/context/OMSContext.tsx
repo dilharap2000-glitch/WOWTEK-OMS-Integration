@@ -695,7 +695,7 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw new Error(`Order ${orderId} not found.`);
     }
 
-    const invoiceNumber = `INV-${order.orderNumber.replace('WTK-', '')}`;
+    const invoiceNumber = `INV-${(order.orderNumber || '').replace('WTK-', '') || Date.now().toString().slice(-4)}`;
 
     const newInvoice: Invoice = {
       id: `inv_${Date.now()}`,
@@ -1380,7 +1380,8 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const filteredOrders = orders.filter((o) => {
     if (dateFilter === 'all') return true;
-    const orderTime = new Date(o.createdAt).getTime();
+    const orderTime = o.createdAt ? new Date(o.createdAt).getTime() : 0;
+    if (isNaN(orderTime) || orderTime <= 0) return false;
 
     if (dateFilter === 'today') {
       return orderTime >= startOfToday;
@@ -1405,7 +1406,10 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   });
 
-  const todayOrdersList = orders.filter((o) => new Date(o.createdAt).getTime() >= startOfToday);
+  const todayOrdersList = orders.filter((o) => {
+    const time = o.createdAt ? new Date(o.createdAt).getTime() : 0;
+    return !isNaN(time) && time >= startOfToday;
+  });
   const todaySales = todayOrdersList.reduce((sum, o) => sum + o.totalAmount, 0);
   const todayNetProfit = todayOrdersList.reduce((sum, o) => sum + (o.profit?.netProfit || 0), 0);
 

@@ -259,7 +259,7 @@ export function processWooCommerceOrder(params: {
       country: wcOrder.billing.country || 'Sri Lanka',
     },
     courier: 'Trans Express',
-    invoiceNumber: `INV-${newOrderNumber.replace('WTK-', '')}`,
+    invoiceNumber: `INV-${(newOrderNumber || '').replace('WTK-', '')}`,
     notes: `Imported via WooCommerce Webhook (External ID: #${wcOrder.id})`,
     createdAt: wcOrder.date_created || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
