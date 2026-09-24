@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { FileText, Search, Printer, Send, ExternalLink, CheckCircle } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
 import { Invoice } from '../types';
+import { formatNumber, formatDate } from '../lib/formatters';
 
 export const InvoicesView: React.FC = () => {
   const { invoices, setPrintableInvoice, sendSMS, businessSettings } = useOMS();
@@ -27,7 +28,7 @@ export const InvoicesView: React.FC = () => {
   });
 
   const handleSendInvoiceSMS = async (inv: Invoice) => {
-    const msg = `WOWTEK: Hi ${inv.customer.name}, your invoice ${inv.invoiceNumber} for order ${inv.orderNumber} (Rs. ${inv.total.toLocaleString()}) has been issued. Thank you for shopping with wowtek.lk`;
+    const msg = `WOWTEK: Hi ${inv.customer.name}, your invoice ${inv.invoiceNumber} for order ${inv.orderNumber} (Rs. ${formatNumber(inv.total)}) has been issued. Thank you for shopping with wowtek.lk`;
     await sendSMS(inv.customer.phone, inv.customer.name, msg, 'INVOICE_AVAILABLE', inv.orderNumber);
     setToast(`Invoice SMS sent to ${inv.customer.phone}!`);
     setTimeout(() => setToast(null), 4000);
@@ -97,7 +98,7 @@ export const InvoicesView: React.FC = () => {
                   </td>
 
                   <td className="py-3 px-3 font-mono font-bold text-white">
-                    Rs. {inv.total.toLocaleString()}
+                    Rs. {formatNumber(inv.total)}
                   </td>
 
                   <td className="py-3 px-3">
@@ -107,7 +108,7 @@ export const InvoicesView: React.FC = () => {
                   </td>
 
                   <td className="py-3 px-3 font-mono text-neutral-400">
-                    {new Date(inv.issueDate).toLocaleDateString([], {
+                    {formatDate(inv.issueDate, {
                       year: 'numeric',
                       month: 'short',
                       day: 'numeric',

@@ -8,6 +8,7 @@
 import React from 'react';
 import { Barcode } from './Barcode';
 import { Waybill, Order } from '../types';
+import { formatDate, formatNumber } from '../lib/formatters';
 
 interface ThermalWaybillProps {
   waybill: Waybill;
@@ -68,12 +69,16 @@ export const ThermalWaybill: React.FC<ThermalWaybillProps> = ({
   const barcodeData = waybill.barcodeValue || waybill.trackingNumber || waybill.waybillNumber;
 
   const displayDate = waybill.createdAt
-    ? new Date(waybill.createdAt).toLocaleDateString('en-GB', {
+    ? formatDate(waybill.createdAt, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
       })
-    : new Date().toLocaleDateString('en-GB');
+    : formatDate(new Date(), {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
 
   // Format routing code from tracking or order
   const routingCode = (waybill.city || 'COLOMBO').toUpperCase().slice(0, 3) + '-01';
@@ -253,7 +258,7 @@ export const ThermalWaybill: React.FC<ThermalWaybillProps> = ({
                 AMOUNT TO COLLECT
               </div>
               <div className="text-lg font-black tracking-tight text-black font-mono leading-tight">
-                Rs. {codValue.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Rs. {formatNumber(codValue, '0.00', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
             </div>
           </div>

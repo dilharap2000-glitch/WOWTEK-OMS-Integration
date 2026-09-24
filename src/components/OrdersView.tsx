@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
 import { ChannelSource, Order, OrderStatus } from '../types';
+import { formatCurrency, formatNumber, formatDate, formatDateTime } from '../lib/formatters';
 
 interface OrdersViewProps {
   selectedOrder?: Order | null;
@@ -91,8 +92,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     setTimeout(() => setActionSuccessMessage(null), 4000);
   };
 
-  const formatLKR = (amount: number) => {
-    return `${businessSettings.currencySymbol} ${amount.toLocaleString('en-LK')}`;
+  const formatLKR = (amount: number | null | undefined) => {
+    return formatCurrency(amount, businessSettings.currencySymbol);
   };
 
   // Filter orders
@@ -336,7 +337,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                               {order.externalOrderId || 'MANUAL-POS'}
                             </div>
                             <div className="text-[9px] text-neutral-400">
-                              {new Date(order.createdAt).toLocaleDateString([], {
+                              {formatDate(order.createdAt, {
                                 month: 'short',
                                 day: 'numeric',
                               })}
@@ -427,7 +428,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   </span>
                 </div>
                 <div className="text-xs text-neutral-400 mt-0.5">
-                  Placed: {new Date(selectedOrder.createdAt).toLocaleString()}
+                  Placed: {formatDateTime(selectedOrder.createdAt)}
                 </div>
               </div>
 

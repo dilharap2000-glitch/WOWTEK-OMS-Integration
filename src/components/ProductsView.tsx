@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
 import { InventoryMovementType, Product } from '../types';
+import { formatNumber, formatDate } from '../lib/formatters';
 
 export const ProductsView: React.FC = () => {
   const {
@@ -256,11 +257,11 @@ export const ProductsView: React.FC = () => {
                     </td>
 
                     <td className="py-3 px-3 font-mono text-neutral-300">
-                      Rs. {p.costPrice.toLocaleString()}
+                      Rs. {formatNumber(p.costPrice)}
                     </td>
 
                     <td className="py-3 px-3 font-mono font-bold text-white">
-                      Rs. {p.sellingPrice.toLocaleString()}
+                      Rs. {formatNumber(p.sellingPrice)}
                     </td>
 
                     <td className="py-3 px-3 font-mono text-emerald-400 font-semibold">
@@ -562,7 +563,7 @@ export const ProductsView: React.FC = () => {
                   {inventoryTransactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-neutral-800/30">
                       <td className="py-2.5 px-3 font-mono text-[10px] text-neutral-400">
-                        {new Date(tx.createdAt).toLocaleDateString([], {
+                        {formatDate(tx.createdAt, {
                           month: 'short',
                           day: 'numeric',
                           hour: '2-digit',

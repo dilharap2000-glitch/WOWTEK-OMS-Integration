@@ -21,6 +21,7 @@ import {
   Info,
 } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
+import { formatTime } from '../lib/formatters';
 
 export const IntegrationsView: React.FC = () => {
   const {
@@ -323,7 +324,7 @@ export const IntegrationsView: React.FC = () => {
                 {smsLogs.slice(0, 8).map((log) => (
                   <tr key={log.id} className="hover:bg-neutral-800/30">
                     <td className="py-2.5 px-3 font-mono text-[10px] text-neutral-400">
-                      {new Date(log.sentAt).toLocaleTimeString([], {
+                      {formatTime(log.sentAt, {
                         hour: '2-digit',
                         minute: '2-digit',
                         second: '2-digit',

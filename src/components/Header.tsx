@@ -16,6 +16,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useOMS, DateFilterType } from '../context/OMSContext';
+import { formatTime } from '../lib/formatters';
 
 interface HeaderProps {
   onOpenMobileSidebar?: () => void;
@@ -238,7 +239,7 @@ export const Header: React.FC<HeaderProps> = ({
                             {n.title}
                           </span>
                           <span className="text-[10px] text-neutral-500 font-mono">
-                            {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {formatTime(n.createdAt, { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                         <p className="text-[11px] text-neutral-400 leading-relaxed">{n.message}</p>

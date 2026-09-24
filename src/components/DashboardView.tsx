@@ -24,6 +24,7 @@ import {
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { useOMS } from '../context/OMSContext';
 import { ChannelSource, Order } from '../types';
+import { formatCurrency, formatNumber, formatDate } from '../lib/formatters';
 
 interface DashboardViewProps {
   onSelectOrder?: (order: Order) => void;
@@ -63,8 +64,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectOrder, onN
     setCurrentView(tabMap[tab] || 'DASHBOARD');
   });
 
-  const formatLKR = (amount: number) => {
-    return `${businessSettings.currencySymbol} ${amount.toLocaleString('en-LK')}`;
+  const formatLKR = (amount: number | null | undefined) => {
+    return formatCurrency(amount, businessSettings.currencySymbol);
   };
 
   const channelChartData = dashboardMetrics.salesByChannel.map((item) => ({
@@ -294,7 +295,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onSelectOrder, onN
                     fontSize: '12px',
                     color: '#fff',
                   }}
-                  formatter={(value: any) => [`Rs. ${Number(value).toLocaleString()}`, '']}
+                  formatter={(value: any) => [`Rs. ${formatNumber(value)}`, '']}
                 />
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                 <Bar dataKey="Sales" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Gross Sales" />

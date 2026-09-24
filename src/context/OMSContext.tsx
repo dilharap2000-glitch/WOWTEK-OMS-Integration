@@ -50,6 +50,7 @@ import { smsService } from '../services/smsService';
 import { processWooCommerceOrder, WooCommerceWebhookOrder } from '../services/woocommerceService';
 import { TransExpressServiceAdapter } from '../services/transExpressService';
 import { apiClient } from '../services/apiClient';
+import { formatNumber } from '../lib/formatters';
 
 export type DateFilterType = 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'all';
 
@@ -754,7 +755,8 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       inv = generateInvoice(orderId);
     }
 
-    const message = `WOWTEK: Hi ${order.customer.name}, your invoice ${inv.invoiceNumber} for order ${order.orderNumber} (Rs. ${(order.totalAmount || order.subtotal).toLocaleString()}) has been issued. Thank you for shopping with wowtek.lk`;
+    const amount = order.totalAmount ?? order.subtotal ?? 0;
+    const message = `WOWTEK: Hi ${order.customer.name}, your invoice ${inv.invoiceNumber} for order ${order.orderNumber} (Rs. ${formatNumber(amount)}) has been issued. Thank you for shopping with wowtek.lk`;
 
     await sendSMS(
       order.customer.phone,

@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { Printer, X, Download, FileText, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
 import { ThermalWaybill } from './ThermalWaybill';
+import { formatCurrency, formatNumber, formatDate } from '../lib/formatters';
 
 export const PrintModals: React.FC = () => {
   const {
@@ -264,7 +265,7 @@ export const PrintModals: React.FC = () => {
                       #{printableInvoice.invoiceNumber}
                     </div>
                     <div className="text-xs font-mono text-neutral-600 mt-1">
-                      Date: {new Date(printableInvoice.issueDate).toLocaleDateString()}
+                      Date: {formatDate(printableInvoice.issueDate)}
                     </div>
                     <div className="text-xs font-mono text-neutral-600">
                       Order: {printableInvoice.orderNumber}
@@ -335,9 +336,9 @@ export const PrintModals: React.FC = () => {
                             {item.warrantyDuration ? `${item.warrantyDuration} ${item.warrantyUnit}` : 'N/A'}
                           </td>
                           <td className="py-3 text-right font-mono font-semibold">{item.quantity}</td>
-                          <td className="py-3 text-right font-mono">{item.unitPrice.toLocaleString()}</td>
+                          <td className="py-3 text-right font-mono">{formatNumber(item.unitPrice)}</td>
                           <td className="py-3 text-right font-mono font-bold text-neutral-900">
-                            {item.total.toLocaleString()}
+                            {formatNumber(item.total)}
                           </td>
                         </tr>
                       ))}
@@ -350,24 +351,24 @@ export const PrintModals: React.FC = () => {
                   <div className="w-64 space-y-1.5 text-xs font-mono">
                     <div className="flex justify-between text-neutral-600">
                       <span>Subtotal:</span>
-                      <span>Rs. {printableInvoice.subtotal.toLocaleString()}</span>
+                      <span>Rs. {formatNumber(printableInvoice.subtotal)}</span>
                     </div>
 
                     {printableInvoice.discount > 0 && (
                       <div className="flex justify-between text-rose-600">
                         <span>Discount:</span>
-                        <span>- Rs. {printableInvoice.discount.toLocaleString()}</span>
+                        <span>- Rs. {formatNumber(printableInvoice.discount)}</span>
                       </div>
                     )}
 
                     <div className="flex justify-between text-neutral-600">
                       <span>Delivery / Courier:</span>
-                      <span>Rs. {printableInvoice.shippingFee.toLocaleString()}</span>
+                      <span>Rs. {formatNumber(printableInvoice.shippingFee)}</span>
                     </div>
 
                     <div className="flex justify-between border-t-2 border-neutral-900 pt-2 text-sm font-black text-neutral-900">
                       <span>TOTAL PAYABLE:</span>
-                      <span>Rs. {printableInvoice.total.toLocaleString()}</span>
+                      <span>Rs. {formatNumber(printableInvoice.total)}</span>
                     </div>
                   </div>
                 </div>

@@ -21,6 +21,7 @@ import {
 import { useOMS } from '../context/OMSContext';
 import { evaluateWarrantyStatus } from '../services/warrantyService';
 import { WarrantyRecord, WarrantyStatus } from '../types';
+import { formatDate } from '../lib/formatters';
 
 export const WarrantyView: React.FC = () => {
   const {
@@ -270,7 +271,7 @@ export const WarrantyView: React.FC = () => {
 
                     <td className="py-3 px-3 font-mono">
                       <div className="font-bold text-neutral-100">
-                        {new Date(w.expiryDate).toLocaleDateString([], {
+                        {formatDate(w.expiryDate, {
                           year: 'numeric',
                           month: 'short',
                           day: 'numeric',

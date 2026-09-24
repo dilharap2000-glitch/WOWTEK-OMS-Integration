@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Building2, Plus, Search, Phone, Mail, MapPin, X } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
+import { formatNumber } from '../lib/formatters';
 
 export const SuppliersView: React.FC = () => {
   const { suppliers, addSupplier } = useOMS();
@@ -93,7 +94,7 @@ export const SuppliersView: React.FC = () => {
                 AUTHORIZED
               </span>
               <span className="text-xs font-mono font-bold text-emerald-400">
-                Purchased: Rs. {supp.totalPurchases.toLocaleString()}
+                Purchased: Rs. {formatNumber(supp.totalPurchases)}
               </span>
             </div>
 

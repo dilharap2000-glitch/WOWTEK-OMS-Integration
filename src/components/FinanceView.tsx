@@ -16,12 +16,13 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { useOMS } from '../context/OMSContext';
+import { formatCurrency, formatNumber } from '../lib/formatters';
 
 export const FinanceView: React.FC = () => {
   const { orders, businessSettings, dateFilter, setDateFilter } = useOMS();
 
-  const formatLKR = (amount: number) => {
-    return `${businessSettings.currencySymbol} ${amount.toLocaleString('en-LK')}`;
+  const formatLKR = (amount: number | null | undefined) => {
+    return formatCurrency(amount, businessSettings.currencySymbol);
   };
 
   // Aggregate financials across current orders
@@ -147,7 +148,7 @@ export const FinanceView: React.FC = () => {
                   fontSize: '12px',
                   color: '#fff',
                 }}
-                formatter={(v: any) => [`Rs. ${Number(v).toLocaleString()}`, '']}
+                formatter={(v: any) => [`Rs. ${formatNumber(v)}`, '']}
               />
               <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
               <Bar dataKey="Revenue" fill="#06b6d4" name="Net Sales" radius={[4, 4, 0, 0]} />

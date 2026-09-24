@@ -17,6 +17,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
+import { formatTime } from '../lib/formatters';
 
 export const SettingsView: React.FC = () => {
   const {
@@ -461,7 +462,7 @@ export const SettingsView: React.FC = () => {
                 {auditLogs.slice(0, 15).map((log) => (
                   <tr key={log.id} className="hover:bg-neutral-800/30">
                     <td className="py-2.5 px-3 font-mono text-[10px] text-neutral-400">
-                      {new Date(log.createdAt).toLocaleTimeString([], {
+                      {formatTime(log.createdAt, {
                         hour: '2-digit',
                         minute: '2-digit',
                         second: '2-digit',

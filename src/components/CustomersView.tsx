@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
 import { Customer } from '../types';
+import { formatNumber, formatDate } from '../lib/formatters';
 
 export const CustomersView: React.FC = () => {
   const { customers, addCustomer, orders, warranties, businessSettings } = useOMS();
@@ -148,12 +149,12 @@ export const CustomersView: React.FC = () => {
                   </td>
 
                   <td className="py-3 px-3 font-mono font-bold text-emerald-400">
-                    Rs. {cust.totalSpent.toLocaleString()}
+                    Rs. {formatNumber(cust.totalSpent)}
                   </td>
 
                   <td className="py-3 px-3 font-mono text-[10px] text-neutral-400">
                     {cust.lastOrderDate
-                      ? new Date(cust.lastOrderDate).toLocaleDateString([], {
+                      ? formatDate(cust.lastOrderDate, {
                           month: 'short',
                           day: 'numeric',
                         })
@@ -209,7 +210,7 @@ export const CustomersView: React.FC = () => {
                 <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800">
                   <div className="text-[11px] text-neutral-400">Total Purchase Value</div>
                   <div className="text-lg font-black text-emerald-400 font-mono mt-0.5">
-                    Rs. {selectedCustomer.totalSpent.toLocaleString()}
+                    Rs. {formatNumber(selectedCustomer.totalSpent)}
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800">
@@ -242,7 +243,7 @@ export const CustomersView: React.FC = () => {
                         </div>
                         <div className="text-right">
                           <div className="font-mono font-bold text-white">
-                            Rs. {o.totalAmount.toLocaleString()}
+                            Rs. {formatNumber(o.totalAmount)}
                           </div>
                           <div className="text-[10px] text-cyan-400 font-semibold">{o.orderStatus}</div>
                         </div>
@@ -272,7 +273,7 @@ export const CustomersView: React.FC = () => {
                         </div>
                         <div className="text-right font-mono">
                           <div className="text-neutral-300">
-                            Expires: {new Date(w.expiryDate).toLocaleDateString()}
+                            Expires: {formatDate(w.expiryDate)}
                           </div>
                           <div className="text-[10px] text-emerald-400 font-semibold">{w.status}</div>
                         </div>

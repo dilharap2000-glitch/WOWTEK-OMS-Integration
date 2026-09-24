@@ -24,6 +24,7 @@ import {
 import { useOMS } from '../context/OMSContext';
 import { Waybill } from '../types';
 import { Barcode } from './Barcode';
+import { formatCurrency, formatNumber, formatDate } from '../lib/formatters';
 
 export const WaybillsView: React.FC = () => {
   const {
@@ -332,7 +333,7 @@ export const WaybillsView: React.FC = () => {
                           </div>
                         )}
                         <div className="text-[10px] text-neutral-500">
-                          {new Date(wb.createdAt).toLocaleDateString([], {
+                          {formatDate(wb.createdAt, {
                             month: 'short',
                             day: 'numeric',
                           })}
@@ -363,7 +364,7 @@ export const WaybillsView: React.FC = () => {
                         {wb.codAmount > 0 ? (
                           <div>
                             <span className="font-black text-amber-400 block">
-                              Rs. {wb.codAmount.toLocaleString()}
+                              Rs. {formatNumber(wb.codAmount)}
                             </span>
                             <span className="text-[9px] uppercase font-bold text-amber-500">COLLECT CASH</span>
                           </div>
@@ -465,7 +466,7 @@ export const WaybillsView: React.FC = () => {
                 >
                   {readyOrders.map((o) => (
                     <option key={o.id} value={o.id}>
-                      {o.orderNumber} — {o.customer.name} ({o.shippingAddress.city}) — Rs. {o.totalAmount.toLocaleString()} ({o.paymentMethod})
+                      {o.orderNumber} — {o.customer.name} ({o.shippingAddress.city}) — Rs. {formatNumber(o.totalAmount)} ({o.paymentMethod})
                     </option>
                   ))}
                 </select>

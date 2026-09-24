@@ -29,6 +29,7 @@ import {
 import { useOMS } from '../context/OMSContext';
 import { apiClient } from '../services/apiClient';
 import { Tenant, SuperAdminMetrics, SubscriptionPlan, AuditLog } from '../types';
+import { formatDate } from '../lib/formatters';
 
 export const SuperAdminView: React.FC = () => {
   const {
@@ -486,7 +487,7 @@ export const SuperAdminView: React.FC = () => {
                       </td>
 
                       <td className="py-3 px-4 font-mono text-[11px] text-neutral-400">
-                        {new Date(t.createdAt).toLocaleDateString()}
+                        {formatDate(t.createdAt)}
                       </td>
 
                       <td className="py-3 px-4 text-right">

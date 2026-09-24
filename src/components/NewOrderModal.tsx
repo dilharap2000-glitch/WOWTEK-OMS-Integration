@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { X, Plus, Trash2, TrendingUp, ShoppingBag, Check } from 'lucide-react';
 import { useOMS } from '../context/OMSContext';
 import { OrderItem } from '../types';
+import { formatNumber } from '../lib/formatters';
 
 interface NewOrderModalProps {
   isOpen?: boolean;
@@ -253,7 +254,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               >
                 {products.map((p) => (
                   <option key={p.id} value={p.id} disabled={p.stockQuantity <= 0}>
-                    {p.name} (Stock: {p.stockQuantity}) — Rs. {p.sellingPrice.toLocaleString()}
+                    {p.name} (Stock: {p.stockQuantity}) — Rs. {formatNumber(p.sellingPrice)}
                   </option>
                 ))}
               </select>
@@ -292,7 +293,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                       </div>
 
                       <div className="font-mono font-bold text-white min-w-[70px] text-right">
-                        Rs. {item.totalPrice.toLocaleString()}
+                        Rs. {formatNumber(item.totalPrice)}
                       </div>
 
                       <button
@@ -343,7 +344,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
             <div>
               <span className="text-xs text-cyan-300 font-medium">Order Total</span>
               <div className="text-xl font-black text-white font-mono">
-                Rs. {totalAmount.toLocaleString()}
+                Rs. {formatNumber(totalAmount)}
               </div>
             </div>
 
