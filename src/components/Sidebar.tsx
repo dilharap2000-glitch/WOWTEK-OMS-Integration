@@ -17,6 +17,7 @@ import {
   Settings,
   Building2,
   LogOut,
+  Shield,
 } from 'lucide-react';
 import { useOMS, ViewType } from '../context/OMSContext';
 
@@ -110,6 +111,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout }) => {
       label: 'Settings & Audit',
       icon: Settings,
     },
+    ...(currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'ADMIN'
+      ? [
+          {
+            id: 'SUPER_ADMIN' as ViewType,
+            label: 'SaaS Platform Admin',
+            icon: Shield,
+            badge: 'ROOT',
+            badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+          },
+        ]
+      : []),
   ];
 
   const handleSelect = (view: ViewType) => {
@@ -239,7 +251,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout }) => {
                   </div>
                   <span
                     className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
-                      u.role === 'ADMIN'
+                      u.role === 'SUPER_ADMIN'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : u.role === 'ADMIN'
                         ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                         : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                     }`}

@@ -13,5 +13,6 @@ app.use(express.urlencoded({ extended: true }));
 
 // Mount all OMS endpoints
 app.use('/api', apiRouter);
+app.use('/', apiRouter);
 
 export default app;

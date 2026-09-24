@@ -22,6 +22,7 @@ import { NewOrderModal } from './components/NewOrderModal';
 import { PrintModals } from './components/PrintModals';
 import { AuthScreen } from './components/AuthScreen';
 import { WarrantyView } from './components/WarrantyView';
+import { SuperAdminView } from './components/SuperAdminView';
 
 const MainLayout: React.FC = () => {
   const { currentView, currentUser } = useOMS();
@@ -55,6 +56,7 @@ const MainLayout: React.FC = () => {
             {currentView === 'INTEGRATIONS' && <IntegrationsView />}
             {currentView === 'SETTINGS' && <SettingsView />}
             {currentView === 'WARRANTY' && <WarrantyView />}
+            {currentView === 'SUPER_ADMIN' && <SuperAdminView />}
           </div>
         </main>
       </div>

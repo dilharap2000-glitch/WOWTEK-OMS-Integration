@@ -25,6 +25,7 @@ import {
   WarrantyClaim,
   WarrantyRecord,
   Waybill,
+  Tenant,
 } from '../types';
 import {
   DEFAULT_BUSINESS_SETTINGS,
@@ -37,6 +38,7 @@ import {
   DEFAULT_USERS,
   DEFAULT_WARRANTIES,
   DEFAULT_WAYBILLS,
+  DEFAULT_TENANTS,
   INITIAL_AUDIT_LOGS,
   INITIAL_NOTIFICATIONS,
   INITIAL_ORDERS,
@@ -62,7 +64,8 @@ export type ViewType =
   | 'WARRANTY'
   | 'FINANCE'
   | 'INTEGRATIONS'
-  | 'SETTINGS';
+  | 'SETTINGS'
+  | 'SUPER_ADMIN';
 
 interface OMSContextType {
   // Navigation & Shell
@@ -158,6 +161,11 @@ interface OMSContextType {
   setPrintableWaybills: (waybills: Waybill[] | null, format?: 'A4' | 'THERMAL_4X6') => void;
   printableInvoice: Invoice | null;
   setPrintableInvoice: (invoice: Invoice | null) => void;
+
+  // Multi-tenant & SaaS Platform
+  tenants: Tenant[];
+  currentTenant: Tenant | null;
+  switchTenant: (tenantId: string) => Promise<void>;
 }
 
 const OMSContext = createContext<OMSContextType | undefined>(undefined);
@@ -172,6 +180,17 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const saved = localStorage.getItem('wowtek_user');
     return saved ? JSON.parse(saved) : DEFAULT_USERS[0];
+  });
+
+  const [tenants, setTenants] = useState<Tenant[]>(() => {
+    const saved = localStorage.getItem('wowtek_tenants');
+    return saved ? JSON.parse(saved) : DEFAULT_TENANTS;
+  });
+
+  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
+    const savedTenantId = localStorage.getItem('active_tenant_id');
+    const matched = DEFAULT_TENANTS.find((t) => t.tenantId === savedTenantId);
+    return matched || DEFAULT_TENANTS[0] || null;
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -383,16 +402,50 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (auditRes.status === 'fulfilled' && auditRes.value) {
         setAuditLogs(auditRes.value);
       }
+
+      try {
+        const tenantsRes = await apiClient.getSuperAdminTenants();
+        if (tenantsRes && tenantsRes.length > 0) {
+          setTenants(tenantsRes);
+        }
+      } catch (tErr) {
+        // Fallback for non-superadmin or local dev
+      }
     } catch (err: any) {
       console.warn('[OMS DATA SYNC]', err.message);
     }
   }, []);
+
+  const switchTenant = useCallback(
+    async (tenantId: string) => {
+      const target = tenants.find((t) => t.tenantId === tenantId);
+      if (target) {
+        setCurrentTenant(target);
+        localStorage.setItem('active_tenant_id', tenantId);
+        setBusinessSettings((prev) => ({
+          ...prev,
+          tenantId: target.tenantId,
+          name: target.businessName,
+          phone: target.phone || prev.phone,
+          email: target.email || prev.email,
+          address: target.address || prev.address,
+          website: target.website || prev.website,
+        }));
+        await refreshData();
+      }
+    },
+    [tenants, refreshData]
+  );
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
   // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem('wowtek_tenants', JSON.stringify(tenants));
+  }, [tenants]);
+
   useEffect(() => {
     localStorage.setItem('wowtek_user', JSON.stringify(currentUser));
   }, [currentUser]);
@@ -1472,6 +1525,9 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPrintableWaybills,
         printableInvoice,
         setPrintableInvoice,
+        tenants,
+        currentTenant,
+        switchTenant,
       }}
     >
       {children}

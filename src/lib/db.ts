@@ -43,25 +43,31 @@ declare global {
 
 let clientPromise: Promise<MongoClient> | null = null;
 
-if (MONGODB_URI) {
-  if (process.env.NODE_ENV === 'development' || process.env.VERCEL) {
-    if (!global._mongoClientPromise) {
+function getClientPromise(): Promise<MongoClient> | null {
+  if (!MONGODB_URI) return null;
+
+  if (!clientPromise) {
+    if (process.env.NODE_ENV === 'development' || process.env.VERCEL) {
+      if (!global._mongoClientPromise) {
+        const client = new MongoClient(MONGODB_URI, {
+          connectTimeoutMS: 10000,
+          socketTimeoutMS: 45000,
+          maxPoolSize: 10,
+        });
+        global._mongoClientPromise = client.connect();
+      }
+      clientPromise = global._mongoClientPromise;
+    } else {
       const client = new MongoClient(MONGODB_URI, {
         connectTimeoutMS: 10000,
         socketTimeoutMS: 45000,
         maxPoolSize: 10,
       });
-      global._mongoClientPromise = client.connect();
+      clientPromise = client.connect();
     }
-    clientPromise = global._mongoClientPromise;
-  } else {
-    const client = new MongoClient(MONGODB_URI, {
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-    });
-    clientPromise = client.connect();
   }
+
+  return clientPromise;
 }
 
 export async function connectToDatabase(): Promise<{
@@ -70,7 +76,7 @@ export async function connectToDatabase(): Promise<{
   isConnected: boolean;
   error?: string;
 }> {
-  if (!MONGODB_URI || !clientPromise) {
+  if (!MONGODB_URI) {
     return {
       client: null,
       db: null,
@@ -79,8 +85,18 @@ export async function connectToDatabase(): Promise<{
     };
   }
 
+  const activePromise = getClientPromise();
+  if (!activePromise) {
+    return {
+      client: null,
+      db: null,
+      isConnected: false,
+      error: 'Unable to initialize MongoDB client.',
+    };
+  }
+
   try {
-    const client = await clientPromise;
+    const client = await activePromise;
     const db = client.db(MONGODB_DB_NAME);
 
     // Cache globally
@@ -99,6 +115,11 @@ export async function connectToDatabase(): Promise<{
     return { client, db, isConnected: true };
   } catch (err: any) {
     console.error('[WOWTEK DB] MongoDB connection error:', err.message);
+    // Reset so subsequent requests can re-attempt connection
+    clientPromise = null;
+    if (global._mongoClientPromise) {
+      global._mongoClientPromise = undefined;
+    }
     return {
       client: null,
       db: null,

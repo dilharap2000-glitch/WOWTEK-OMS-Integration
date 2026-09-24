@@ -1284,7 +1284,7 @@ apiRouter.post('/orders', async (req: Request, res: Response) => {
       commissionConfigs,
     });
 
-    const subtotal = items.reduce((s, i) => s + i.totalPrice, 0);
+    const subtotal = items.reduce((s, i) => s + (i.totalPrice ?? (i.unitPrice * i.quantity)), 0);
     const totalAmount = Math.max(0, subtotal - (orderData.discount || 0) + (orderData.shippingFee || 0));
 
     const defaultAddress = {
