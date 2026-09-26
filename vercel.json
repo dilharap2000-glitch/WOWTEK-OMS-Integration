@@ -2,10 +2,23 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 30
+    },
+    "api/*.ts": {
+      "includeFiles": "src/**",
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
+      "source": "/api",
+      "destination": "/api/index.js"
+    },
+    {
       "source": "/api/(.*)",
-      "destination": "/api/index"
+      "destination": "/api/index.js"
     },
     {
       "source": "/(.*)",
