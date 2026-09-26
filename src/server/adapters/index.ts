@@ -20,19 +20,19 @@ export {
 
 export class TenantAdapterManager {
   /**
-   * Builds an active WooCommerceAdapter from encrypted database integration record
+   * Builds an active WooCommerceAdapter using server-side environment variables
+   * (WOOCOMMERCE_URL, WOOCOMMERCE_CONSUMER_KEY, WOOCOMMERCE_CONSUMER_SECRET)
+   * or encrypted database integration record.
    */
-  static getWooCommerceAdapter(tenantId: string, encryptedCredentials?: string, webhookSecret?: string): WooCommerceAdapter | null {
-    if (!encryptedCredentials) return null;
-    const creds = decryptCredentials<WooCommerceConfig>(encryptedCredentials);
-    if (!creds) return null;
+  static getWooCommerceAdapter(tenantId: string, encryptedCredentials?: string, webhookSecret?: string): WooCommerceAdapter {
+    const creds = encryptedCredentials ? decryptCredentials<WooCommerceConfig>(encryptedCredentials) : null;
 
     return new WooCommerceAdapter({
       tenantId,
-      storeUrl: creds.storeUrl,
-      consumerKey: creds.consumerKey,
-      consumerSecret: creds.consumerSecret,
-      webhookSecret: creds.webhookSecret || webhookSecret,
+      storeUrl: creds?.storeUrl || process.env.WOOCOMMERCE_URL || 'https://wowtek.lk',
+      consumerKey: creds?.consumerKey || process.env.WOOCOMMERCE_CONSUMER_KEY || '',
+      consumerSecret: creds?.consumerSecret || process.env.WOOCOMMERCE_CONSUMER_SECRET || '',
+      webhookSecret: creds?.webhookSecret || process.env.WOOCOMMERCE_WEBHOOK_SECRET || webhookSecret || '',
     });
   }
 

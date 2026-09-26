@@ -540,6 +540,48 @@ class APIClient {
     return res.success && res.data ? res.data : { success: false, message: res.error || 'Test failed' };
   }
 
+  async testWooCommerce(): Promise<{
+    success: boolean;
+    status: 'SUCCESS' | 'FAILED';
+    httpStatus?: number;
+    message: string;
+    result?: string;
+    ordersCount: number;
+    totalOrders?: number;
+  }> {
+    const res = await this.request<{
+      success: boolean;
+      status: 'SUCCESS' | 'FAILED';
+      httpStatus?: number;
+      message: string;
+      result?: string;
+      ordersCount: number;
+      totalOrders?: number;
+    }>('/integrations/woocommerce/test', { method: 'POST' });
+
+    if (res.data) {
+      return res.data;
+    }
+    return {
+      success: false,
+      status: 'FAILED',
+      httpStatus: 500,
+      message: res.error || 'WooCommerce test failed',
+      ordersCount: 0,
+    };
+  }
+
+  async getWooCommerceOrders(params?: { per_page?: number; page?: number; status?: string }): Promise<any[]> {
+    const query = new URLSearchParams();
+    if (params?.per_page) query.set('per_page', String(params.per_page));
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.status) query.set('status', params.status);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+
+    const res = await this.request<{ success: boolean; orders: any[] }>(`/integrations/woocommerce/orders${qs}`);
+    return res.success && res.data?.orders ? res.data.orders : [];
+  }
+
   async trackTransExpress(orderNoOrWaybill: string): Promise<any> {
     const res = await this.request<{ success: boolean; tracking: any }>(
       `/integrations/trans-express/track?order_no=${encodeURIComponent(orderNoOrWaybill)}`

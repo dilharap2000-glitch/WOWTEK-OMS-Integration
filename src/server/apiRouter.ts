@@ -951,6 +951,25 @@ apiRouter.post('/integrations/:provider/test', async (req: Request, res: Respons
       })) as any;
     }
 
+    if (providerParam === 'WOOCOMMERCE') {
+      const adapter = TenantAdapterManager.getWooCommerceAdapter(
+        tenantId,
+        integration?.encryptedCredentials,
+        integration?.webhookSecret
+      );
+      const testResult = await adapter.testConnection();
+      return res.status(testResult.httpStatus && testResult.httpStatus >= 200 && testResult.httpStatus < 600 ? testResult.httpStatus : 200).json(testResult);
+    }
+
+    if (providerParam === 'TRANSEX') {
+      const adapter = TenantAdapterManager.getTransExpressAdapter(
+        tenantId,
+        integration?.encryptedCredentials
+      );
+      const testResult = await adapter.testConnection();
+      return res.json(testResult);
+    }
+
     if (!integration || !integration.encryptedCredentials) {
       return res.json({
         success: false,
@@ -964,24 +983,11 @@ apiRouter.post('/integrations/:provider/test', async (req: Request, res: Respons
       message: 'Unknown provider',
     };
 
-    if (providerParam === 'WOOCOMMERCE') {
-      const adapter = TenantAdapterManager.getWooCommerceAdapter(
-        tenantId,
-        integration.encryptedCredentials,
-        integration.webhookSecret
-      );
-      testResult = adapter ? await adapter.testConnection() : { success: false, message: 'Invalid config' };
-    } else if (providerParam === 'PICKME') {
+    if (providerParam === 'PICKME') {
       const adapter = TenantAdapterManager.getPickMeAdapter(tenantId, integration.encryptedCredentials);
       testResult = adapter ? await adapter.testConnection() : { success: false, message: 'Invalid config' };
     } else if (providerParam === 'UBER_EATS') {
       const adapter = TenantAdapterManager.getUberEatsAdapter(tenantId, integration.encryptedCredentials);
-      testResult = adapter ? await adapter.testConnection() : { success: false, message: 'Invalid config' };
-    } else if (providerParam === 'TRANSEX') {
-      const adapter = TenantAdapterManager.getTransExpressAdapter(
-        tenantId,
-        integration.encryptedCredentials
-      );
       testResult = adapter ? await adapter.testConnection() : { success: false, message: 'Invalid config' };
     } else if (providerParam === 'SMS') {
       const adapter = TenantAdapterManager.getSmsAdapter(tenantId, integration.encryptedCredentials);
@@ -1023,24 +1029,181 @@ apiRouter.post('/integrations/:provider/disconnect', requireRole(['ADMIN', 'SUPE
 });
 
 // ============================================================================
+// 5A. WOOCOMMERCE REST API v3 INTEGRATION
+// Base URL: https://wowtek.lk
+// Authenticated via WOOCOMMERCE_URL, WOOCOMMERCE_CONSUMER_KEY, WOOCOMMERCE_CONSUMER_SECRET
+// STRICT BUSINESS RULE: Read-only connection testing & order ingestion.
+// ZERO-MUTATION: Never create, update, cancel, or delete any WooCommerce order during test.
+// ============================================================================
+
+/**
+ * Safe Test WooCommerce Connection Endpoint
+ * - Uses WooCommerce REST API v3
+ * - Safely retrieves WooCommerce orders via read-only GET /wp-json/wc/v3/orders
+ * - Does NOT create, update, cancel, or delete any WooCommerce order
+ * - Does NOT expose, log, or display credentials
+ * - Returns:
+ *     HTTP status
+ *     SUCCESS / FAILED
+ *     Number of orders returned
+ */
+const handleWooCommerceConnectionTest = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 'tenant_wowtek_lk';
+    const adapter = TenantAdapterManager.getWooCommerceAdapter(tenantId);
+    const result = await adapter.testConnection();
+
+    // Check if caller requests text output
+    const isTextMode =
+      req.query.format === 'text' ||
+      req.query.raw === 'true' ||
+      req.headers.accept === 'text/plain';
+
+    if (isTextMode) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(result.success ? 200 : (result.httpStatus || 400)).send(result.result);
+    }
+
+    return res
+      .status(result.httpStatus && result.httpStatus >= 200 && result.httpStatus < 600 ? result.httpStatus : (result.success ? 200 : 400))
+      .json(result);
+  } catch (err: any) {
+    const safeError = err.message
+      ? err.message
+          .replace(/basic\s+[a-zA-Z0-9_\-\.\=\+]+/gi, 'Basic [REDACTED]')
+          .replace(/ck_[a-zA-Z0-9]+/gi, 'ck_[REDACTED]')
+          .replace(/cs_[a-zA-Z0-9]+/gi, 'cs_[REDACTED]')
+      : 'Unexpected internal error';
+
+    const failObj = {
+      success: false,
+      status: 'FAILED' as const,
+      httpStatus: 500,
+      message: `connection failed: ${safeError}`,
+      result: `FAILED → connection failed: ${safeError}`,
+      ordersCount: 0,
+      endpoint: '/wp-json/wc/v3/orders',
+    };
+
+    if (
+      req.query.format === 'text' ||
+      req.query.raw === 'true' ||
+      req.headers.accept === 'text/plain'
+    ) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(500).send(failObj.result);
+    }
+
+    return res.status(500).json(failObj);
+  }
+};
+
+apiRouter.post('/integrations/woocommerce/test', handleWooCommerceConnectionTest);
+apiRouter.get('/integrations/woocommerce/test', handleWooCommerceConnectionTest);
+apiRouter.post('/integrations/woocommerce/test-connection', handleWooCommerceConnectionTest);
+apiRouter.get('/integrations/woocommerce/test-connection', handleWooCommerceConnectionTest);
+
+/**
+ * Safe Read-Only Retrieval of WooCommerce Orders: GET /wp-json/wc/v3/orders
+ * Does NOT mutate, update, or create orders.
+ */
+apiRouter.get('/integrations/woocommerce/orders', async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 'tenant_wowtek_lk';
+    const adapter = TenantAdapterManager.getWooCommerceAdapter(tenantId);
+    const perPage = Number(req.query.per_page) || 10;
+    const page = Number(req.query.page) || 1;
+    const status = req.query.status ? String(req.query.status) : undefined;
+
+    const data = await adapter.getOrders({ per_page: perPage, page, status });
+    return res.status(data.httpStatus || (data.success ? 200 : 400)).json(data);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Safe Read-Only Retrieval of WooCommerce Products: GET /wp-json/wc/v3/products
+ */
+apiRouter.get('/integrations/woocommerce/products', async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 'tenant_wowtek_lk';
+    const adapter = TenantAdapterManager.getWooCommerceAdapter(tenantId);
+    const perPage = Number(req.query.per_page) || 10;
+    const page = Number(req.query.page) || 1;
+
+    const data = await adapter.getProducts({ per_page: perPage, page });
+    return res.status(data.httpStatus || (data.success ? 200 : 400)).json(data);
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
 // 5B. TRANS EXPRESS PRODUCTION LOGISTICS & WAYBILL INTEGRATION
 // Base URL: https://portal.transexpress.lk/api
 // STRICT BUSINESS RULE: Only WEBSITE / WooCommerce orders can create waybills
 // ============================================================================
 
 /**
- * Safe Test Connection (Does not create any shipment)
+ * Safe Test Trans Express Connection Endpoint
+ * - Uses harmless authenticated /provinces endpoint from official Trans Express documentation
+ * - Does NOT create a real order
+ * - Does NOT create a real waybill
+ * - Does NOT expose or print the API key
+ * - Returns only:
+ *     SUCCESS → Trans Express API connected
+ *     FAILED → connection failed + safe error message
  */
-apiRouter.post('/integrations/trans-express/test', async (req: Request, res: Response) => {
+const handleTransExpressConnectionTest = async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId || 'tenant_wowtek_lk';
     const adapter = TenantAdapterManager.getTransExpressAdapter(tenantId);
     const result = await adapter.testConnection();
+
+    // Check if caller requests text output
+    const isTextMode =
+      req.query.format === 'text' ||
+      req.query.raw === 'true' ||
+      req.headers.accept === 'text/plain';
+
+    if (isTextMode) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(result.success ? 200 : 400).send(result.result);
+    }
+
     return res.json(result);
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
+    const safeError = err.message
+      ? err.message.replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+      : 'Unexpected internal error';
+
+    const failObj = {
+      success: false,
+      status: 'FAILED' as const,
+      message: `connection failed: ${safeError}`,
+      result: `FAILED → connection failed: ${safeError}`,
+      endpoint: '/provinces',
+    };
+
+    if (
+      req.query.format === 'text' ||
+      req.query.raw === 'true' ||
+      req.headers.accept === 'text/plain'
+    ) {
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      return res.status(400).send(failObj.result);
+    }
+
+    return res.json(failObj);
   }
-});
+};
+
+apiRouter.post('/integrations/trans-express/test', handleTransExpressConnectionTest);
+apiRouter.get('/integrations/trans-express/test', handleTransExpressConnectionTest);
+apiRouter.post('/integrations/trans-express/test-connection', handleTransExpressConnectionTest);
+apiRouter.get('/integrations/trans-express/test-connection', handleTransExpressConnectionTest);
+
 
 /**
  * Get Provinces: GET /provinces

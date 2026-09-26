@@ -135,6 +135,15 @@ interface OMSContextType {
     orderObj?: Order
   ) => Promise<{ success: boolean; waybill?: Waybill; message: string; error?: string }>;
   testTransExpressConnection: () => Promise<{ success: boolean; message: string; provincesCount?: number }>;
+  testWooCommerceConnection: () => Promise<{
+    success: boolean;
+    status: 'SUCCESS' | 'FAILED';
+    httpStatus?: number;
+    message: string;
+    result?: string;
+    ordersCount: number;
+    totalOrders?: number;
+  }>;
   updateWaybillStatus: (waybillId: string, status: Waybill['status']) => void;
   updateWaybill: (waybillId: string, updates: Partial<Waybill>) => void;
   invoices: Invoice[];
@@ -1051,6 +1060,10 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return await apiClient.testTransExpress();
   };
 
+  const testWooCommerceConnection = async () => {
+    return await apiClient.testWooCommerce();
+  };
+
   const updateWaybill = (waybillId: string, updates: Partial<Waybill>) => {
     setWaybills((prev) =>
       prev.map((wb) => {
@@ -1731,6 +1744,7 @@ export const OMSProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createWaybill,
         createTransExpressShipment,
         testTransExpressConnection,
+        testWooCommerceConnection,
         updateWaybillStatus,
         updateWaybill,
         invoices,

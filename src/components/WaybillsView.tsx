@@ -265,20 +265,26 @@ export const WaybillsView: React.FC = () => {
     setConnectionStatus(null);
     try {
       const res = await testTransExpressConnection();
+      const formattedResult =
+        (res as any).result ||
+        (res.success
+          ? 'SUCCESS → Trans Express API connected'
+          : `FAILED → ${res.message}`);
+
       setConnectionStatus({
         tested: true,
         success: res.success,
-        message: res.message,
+        message: formattedResult,
       });
       if (res.success) {
-        showToast('success', res.message);
+        showToast('success', formattedResult);
       } else {
-        showToast('error', res.message);
+        showToast('error', formattedResult);
       }
     } catch (err: any) {
-      const msg = err.message || 'Connection test failed';
-      setConnectionStatus({ tested: true, success: false, message: msg });
-      showToast('error', msg);
+      const safeMsg = `FAILED → connection failed: ${err.message || 'Connection test failed'}`;
+      setConnectionStatus({ tested: true, success: false, message: safeMsg });
+      showToast('error', safeMsg);
     } finally {
       setTestingConnection(false);
     }

@@ -87,20 +87,34 @@ export class TransExpressAdapter {
 
   /**
    * Safe test connection:
-   * Calls the harmless authenticated /provinces endpoint.
-   * Does NOT create any shipment.
+   * Calls the harmless authenticated /provinces endpoint from official Trans Express documentation.
+   * Does NOT create any order or waybill.
+   * Does NOT expose or print the API key.
    */
-  async testConnection(): Promise<{ success: boolean; message: string; provincesCount?: number }> {
+  async testConnection(): Promise<{
+    success: boolean;
+    status: 'SUCCESS' | 'FAILED';
+    message: string;
+    result: string;
+    endpoint: string;
+    provincesCount?: number;
+  }> {
     const apiKey = this.getApiKey();
+    const endpointUsed = `${this.baseUrl}/provinces`;
+
     if (!apiKey) {
+      const safeError = 'TRANSEX_API_KEY environment variable is not configured';
       return {
         success: false,
-        message: 'Trans Express API Key (TRANSEX_API_KEY) is not set in environment variables.',
+        status: 'FAILED',
+        message: `connection failed: ${safeError}`,
+        result: `FAILED → connection failed: ${safeError}`,
+        endpoint: '/provinces',
       };
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/provinces`, {
+      const response = await fetch(endpointUsed, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -111,28 +125,55 @@ export class TransExpressAdapter {
       });
 
       if (!response.ok) {
+        let safeDetail = `HTTP ${response.status} ${response.statusText || 'Request failed'}`.trim();
+        try {
+          const errBody = await response.json();
+          if (errBody && typeof errBody === 'object') {
+            const rawMsg = errBody.message || errBody.error || '';
+            if (rawMsg && typeof rawMsg === 'string') {
+              const sanitized = rawMsg.replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+              safeDetail += ` - ${sanitized}`;
+            }
+          }
+        } catch {
+          // ignore parsing error
+        }
+
+        const safeError = safeDetail;
         return {
           success: false,
-          message: `Trans Express API returned HTTP ${response.status}: ${response.statusText}`,
+          status: 'FAILED',
+          message: `connection failed: ${safeError}`,
+          result: `FAILED → connection failed: ${safeError}`,
+          endpoint: '/provinces',
         };
       }
 
       const data = await response.json();
       const count = Array.isArray(data)
         ? data.length
-        : Array.isArray(data.data)
+        : Array.isArray(data?.data)
         ? data.data.length
         : 9;
 
       return {
         success: true,
-        message: `Connected successfully to Trans Express Production Portal (Retrieved ${count} provinces).`,
+        status: 'SUCCESS',
+        message: 'Trans Express API connected',
+        result: 'SUCCESS → Trans Express API connected',
+        endpoint: '/provinces',
         provincesCount: count,
       };
     } catch (err: any) {
+      const safeDetail = err.message
+        ? err.message.replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+        : 'Network timeout or unreachable portal';
       return {
         success: false,
-        message: `Connection failed: ${err.message || 'Network timeout or unreachable portal.'}`,
+        status: 'FAILED',
+        message: `connection failed: ${safeDetail}`,
+        result: `FAILED → connection failed: ${safeDetail}`,
+        endpoint: '/provinces',
       };
     }
   }
@@ -164,7 +205,7 @@ export class TransExpressAdapter {
           if (list && list.length > 0) {
             return list.map((item: any) => ({
               id: Number(item.id || item.province_id),
-              name: String(item.name || item.province_name),
+              name: String(item.text || item.name || item.province_name),
             }));
           }
         }

@@ -31,6 +31,8 @@ export const IntegrationsView: React.FC = () => {
     smsLogs,
     sendSMS,
     simulateWooCommerceWebhookOrder,
+    testTransExpressConnection,
+    testWooCommerceConnection,
   } = useOMS();
 
   const [testPhone, setTestPhone] = useState('+94 77 123 4567');
@@ -40,9 +42,18 @@ export const IntegrationsView: React.FC = () => {
 
   const [isSimulatingWC, setIsSimulatingWC] = useState(false);
   const [wcFeedback, setWcFeedback] = useState<string | null>(null);
+  const [isTestingWC, setIsTestingWC] = useState(false);
+  const [wcConnResult, setWcConnResult] = useState<{
+    success: boolean;
+    result: string;
+    ordersCount?: number;
+    httpStatus?: number;
+  } | null>(null);
 
   const [testTrackingNumber, setTestTrackingNumber] = useState('TEX-9481029');
   const [trackingResult, setTrackingResult] = useState<string | null>(null);
+  const [isTestingTransEx, setIsTestingTransEx] = useState(false);
+  const [transExConnResult, setTransExConnResult] = useState<{ success: boolean; result: string } | null>(null);
 
   const handleSimulateWebhook = async (status: 'processing' | 'completed' | 'pending' = 'processing') => {
     setIsSimulatingWC(true);
@@ -82,6 +93,57 @@ export const IntegrationsView: React.FC = () => {
       setTrackingResult(
         `Trans Express Status for ${testTrackingNumber}: Consignment scanned at Colombo Central Sort Facility. Out for Delivery.`
       );
+    }
+  };
+
+  const handleTestWooCommerceConnection = async () => {
+    setIsTestingWC(true);
+    setWcConnResult(null);
+    try {
+      const res = await testWooCommerceConnection();
+      const outputText =
+        res.result ||
+        (res.success
+          ? `SUCCESS → WooCommerce REST API connected (${res.ordersCount} orders retrieved)`
+          : `FAILED → ${res.message}`);
+      setWcConnResult({
+        success: res.success,
+        result: outputText,
+        ordersCount: res.ordersCount,
+        httpStatus: res.httpStatus,
+      });
+    } catch (err: any) {
+      setWcConnResult({
+        success: false,
+        result: `FAILED → connection failed: ${err.message || 'Connection test failed'}`,
+        ordersCount: 0,
+      });
+    } finally {
+      setIsTestingWC(false);
+    }
+  };
+
+  const handleTestTransExpressConnection = async () => {
+    setIsTestingTransEx(true);
+    setTransExConnResult(null);
+    try {
+      const res = await testTransExpressConnection();
+      const outputText =
+        (res as any).result ||
+        (res.success
+          ? 'SUCCESS → Trans Express API connected'
+          : `FAILED → ${res.message}`);
+      setTransExConnResult({
+        success: res.success,
+        result: outputText,
+      });
+    } catch (err: any) {
+      setTransExConnResult({
+        success: false,
+        result: `FAILED → connection failed: ${err.message || 'Connection test failed'}`,
+      });
+    } finally {
+      setIsTestingTransEx(false);
     }
   };
 
@@ -180,6 +242,49 @@ export const IntegrationsView: React.FC = () => {
               <span>Test "Pending" (Ignored)</span>
             </button>
           </div>
+
+          {/* Secure Harmless Test Connection */}
+          <div className="pt-2 border-t border-neutral-800/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-neutral-400 font-medium">REST API v3 Verification</span>
+              <button
+                onClick={handleTestWooCommerceConnection}
+                disabled={isTestingWC}
+                className="px-3 py-1 rounded bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 border border-cyan-500/30 text-xs font-semibold cursor-pointer disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+              >
+                {isTestingWC ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Testing API...
+                  </>
+                ) : (
+                  <>
+                    <Plug className="w-3 h-3" />
+                    Test WooCommerce Connection
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[10px] text-neutral-500">
+              Calls harmless read-only <code className="text-neutral-400">GET /wp-json/wc/v3/orders</code>. Never creates, updates, or modifies any WooCommerce order.
+            </p>
+            {wcConnResult && (
+              <div
+                className={`p-2.5 rounded-lg border text-xs font-mono font-semibold ${
+                  wcConnResult.success
+                    ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                    : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+                }`}
+              >
+                <div>{wcConnResult.result}</div>
+                {wcConnResult.httpStatus !== undefined && (
+                  <div className="text-[10.5px] mt-1 opacity-80 font-normal">
+                    HTTP Status: {wcConnResult.httpStatus} • Orders Retrieved: {wcConnResult.ordersCount ?? 0}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 2. Trans Express Logistics */}
@@ -225,6 +330,44 @@ export const IntegrationsView: React.FC = () => {
               {trackingResult}
             </div>
           )}
+
+          {/* Secure Harmless Test Connection */}
+          <div className="pt-2 border-t border-neutral-800/80 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-neutral-400 font-medium">API Credential Verification</span>
+              <button
+                onClick={handleTestTransExpressConnection}
+                disabled={isTestingTransEx}
+                className="px-3 py-1 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 border border-purple-500/30 text-xs font-semibold cursor-pointer disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+              >
+                {isTestingTransEx ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    Testing API...
+                  </>
+                ) : (
+                  <>
+                    <Plug className="w-3 h-3" />
+                    Test Trans Express Connection
+                  </>
+                )}
+              </button>
+            </div>
+            <p className="text-[10px] text-neutral-500">
+              Calls harmless authenticated <code className="text-neutral-400">GET /provinces</code> endpoint. Never creates real orders or waybills.
+            </p>
+            {transExConnResult && (
+              <div
+                className={`p-2.5 rounded-lg border text-xs font-mono font-semibold ${
+                  transExConnResult.success
+                    ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                    : 'bg-rose-950/40 border-rose-500/40 text-rose-300'
+                }`}
+              >
+                {transExConnResult.result}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 3. PickMe Integration Adapter */}
