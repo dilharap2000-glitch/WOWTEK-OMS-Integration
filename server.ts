@@ -5,6 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { connectToDatabase, checkDatabaseHealth, ObjectId } from './server/db';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -120,6 +121,136 @@ let db = loadDB();
 async function startServer() {
   const app = express();
   app.use(express.json());
+
+  // Database Health Check Endpoint
+  app.get('/api/health/database', async (req, res) => {
+    const health = await checkDatabaseHealth();
+    if (health.status === 'healthy') {
+      res.json(health);
+    } else {
+      res.status(503).json(health);
+    }
+  });
+
+  // Products CRUD API Endpoints using MongoDB (wowtek_oms)
+  app.get('/api/products', async (req, res) => {
+    try {
+      const database = await connectToDatabase();
+      const tenantId = (req.query.tenantId as string) || 'default-tenant';
+      const products = await database.collection('products').find({ tenantId }).toArray();
+      const mapped = products.map(p => ({
+        ...p,
+        id: p._id.toString(),
+      }));
+      res.json(mapped);
+    } catch (err: any) {
+      console.error('Error fetching products from MongoDB:', err);
+      res.status(500).json({ error: 'Database connection error: Unable to fetch products from MongoDB Atlas', details: err.message });
+    }
+  });
+
+  app.post('/api/products', async (req, res) => {
+    try {
+      const { name, sku, price, costPrice, stockByOutlet, category, supplierId, barcode, warrantyPeriodMonths, tenantId = 'default-tenant' } = req.body;
+      
+      if (!name || !sku || price === undefined || price === null) {
+        return res.status(400).json({ error: 'Validation Error: name, sku, and price are required product fields.' });
+      }
+
+      const database = await connectToDatabase();
+      const newProduct = {
+        tenantId,
+        name,
+        sku,
+        price: parseFloat(price),
+        costPrice: parseFloat(costPrice || 0),
+        stockByOutlet: stockByOutlet || {},
+        category: category || 'General',
+        supplierId: supplierId || '',
+        barcode: barcode || sku,
+        warrantyPeriodMonths: parseInt(warrantyPeriodMonths || 6),
+        createdAt: new Date().toISOString(),
+      };
+
+      const result = await database.collection('products').insertOne(newProduct);
+      const insertedProduct = {
+        ...newProduct,
+        id: result.insertedId.toString(),
+      };
+
+      res.status(201).json(insertedProduct);
+    } catch (err: any) {
+      console.error('Error creating product in MongoDB:', err);
+      res.status(500).json({ error: 'Database error: Failed to create product', details: err.message });
+    }
+  });
+
+  app.put('/api/products/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ error: 'Validation Error: Invalid product ObjectId format' });
+      }
+
+      const { name, sku, price, costPrice, stockByOutlet, category, supplierId, barcode, warrantyPeriodMonths } = req.body;
+      if (!name || !sku || price === undefined) {
+        return res.status(400).json({ error: 'Validation Error: name, sku, and price are required.' });
+      }
+
+      const database = await connectToDatabase();
+      const updateData: any = {
+        name,
+        sku,
+        price: parseFloat(price),
+        costPrice: parseFloat(costPrice || 0),
+        stockByOutlet: stockByOutlet || {},
+        category: category || 'General',
+        supplierId: supplierId || '',
+        barcode: barcode || sku,
+        warrantyPeriodMonths: parseInt(warrantyPeriodMonths || 6),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const result = await database.collection('products').findOneAndUpdate(
+        { _id: new ObjectId(id) },
+        { $set: updateData },
+        { returnDocument: 'after' }
+      );
+
+      if (!result) {
+        return res.status(404).json({ error: 'Product not found in database' });
+      }
+
+      res.json({
+        ...result,
+        id: result._id.toString(),
+      });
+    } catch (err: any) {
+      console.error('Error updating product in MongoDB:', err);
+      res.status(500).json({ error: 'Database error: Failed to update product', details: err.message });
+    }
+  });
+
+  app.delete('/api/products/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).json({ error: 'Validation Error: Invalid product ObjectId format' });
+      }
+
+      const database = await connectToDatabase();
+      const result = await database.collection('products').deleteOne({ _id: new ObjectId(id) });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ error: 'Product not found in database' });
+      }
+
+      res.json({ success: true, message: 'Product deleted successfully from MongoDB' });
+    } catch (err: any) {
+      console.error('Error deleting product from MongoDB:', err);
+      res.status(500).json({ error: 'Database error: Failed to delete product', details: err.message });
+    }
+  });
 
   app.get('/api/state', (req, res) => {
     res.json(db);

@@ -31,7 +31,6 @@ import {
   Invoice,
   Supplier, 
   GRNEntry, 
-  WarrantyClaim, 
   WarrantyRecord,
   Expense, 
   SMSConfig, 
@@ -89,9 +88,12 @@ export default function App() {
   const [currentOutletId, setCurrentOutletId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Persistent States
+  // Products from MongoDB Atlas via /api/products
+  const [products, setProducts] = useState<ProductItem[]>([]);
+  const [dbError, setDbError] = useState<string | null>(null);
+
+  // Persistent States (other collections)
   const [outlets] = useState<Outlet[]>(() => loadStorage('wowtek_outlets', defaultOutlets));
-  const [products, setProducts] = useState<ProductItem[]>(() => loadStorage('wowtek_products', []));
   const [barcodes, setBarcodes] = useState<BarcodeLabel[]>(() => loadStorage('wowtek_barcodes', []));
   const [orders, setOrders] = useState<Order[]>(() => loadStorage('wowtek_orders', []));
   const [invoices, setInvoices] = useState<Invoice[]>(() => loadStorage('wowtek_invoices', []));
@@ -104,8 +106,27 @@ export default function App() {
   const [smsConfig, setSmsConfig] = useState<SMSConfig>(() => loadStorage('wowtek_sms_config', initialSMSConfig));
   const [integrations, setIntegrations] = useState<IntegrationConfig>(() => loadStorage('wowtek_integrations', defaultIntegrations));
 
-  // Sync to localStorage
-  useEffect(() => { saveStorage('wowtek_products', products); }, [products]);
+  // Load products from MongoDB Atlas API on mount
+  useEffect(() => {
+    fetch('/api/products')
+      .then(async res => {
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Database error (${res.status})`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        setProducts(data);
+        setDbError(null);
+      })
+      .catch(err => {
+        console.error('Failed to load products from MongoDB Atlas:', err);
+        setDbError('Database Connection Error: Unable to fetch products from MongoDB Atlas (wowtek_oms). Please verify MONGODB_URI connection string.');
+      });
+  }, []);
+
+  // Sync other persistent states to localStorage
   useEffect(() => { saveStorage('wowtek_barcodes', barcodes); }, [barcodes]);
   useEffect(() => { saveStorage('wowtek_orders', orders); }, [orders]);
   useEffect(() => { saveStorage('wowtek_invoices', invoices); }, [invoices]);
@@ -260,16 +281,53 @@ export default function App() {
     logAudit('BULK_ORDERS_DELETED', `Deleted ${orderIds.length} orders`);
   };
 
-  const handleSaveProduct = (product: ProductItem) => {
-    setProducts([product, ...products]);
-    logAudit('PRODUCT_CREATED', `Created product ${product.name} (${product.sku})`);
+  // Product CRUD using MongoDB Atlas API (/api/products)
+  const handleSaveProduct = async (product: ProductItem) => {
+    try {
+      const isExisting = products.some(p => p.id === product.id);
+      const url = isExisting ? `/api/products/${product.id}` : '/api/products';
+      const method = isExisting ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(product),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to save product in MongoDB');
+      }
+
+      const saved = await res.json();
+      if (isExisting) {
+        setProducts(products.map(p => p.id === saved.id ? saved : p));
+        logAudit('PRODUCT_UPDATED', `Updated product ${saved.name} (${saved.sku}) in MongoDB`);
+      } else {
+        setProducts([saved, ...products]);
+        logAudit('PRODUCT_CREATED', `Created product ${saved.name} (${saved.sku}) in MongoDB Atlas`);
+      }
+    } catch (err: any) {
+      alert(`Database Error: ${err.message}`);
+    }
   };
 
-  const handleDeleteProduct = (id: string) => {
-    if (confirm('Permanently delete this product?')) {
-      const prod = products.find(p => p.id === id);
-      setProducts(products.filter(p => p.id !== id));
-      logAudit('PRODUCT_DELETED', `Deleted product ${prod?.name}`);
+  const handleDeleteProduct = async (id: string) => {
+    if (confirm('Permanently delete this product from MongoDB Atlas?')) {
+      try {
+        const res = await fetch(`/api/products/${id}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Failed to delete product from MongoDB');
+        }
+        const prod = products.find(p => p.id === id);
+        setProducts(products.filter(p => p.id !== id));
+        logAudit('PRODUCT_DELETED', `Deleted product ${prod?.name} from MongoDB Atlas`);
+      } catch (err: any) {
+        alert(`Database Error: ${err.message}`);
+      }
     }
   };
 
@@ -360,151 +418,172 @@ export default function App() {
   const pendingTransferCount = transfers.filter(t => t.status === 'Pending').length;
 
   return (
-    <div className="flex h-screen bg-black text-zinc-100 font-sans antialiased overflow-hidden">
-      {/* Sidebar */}
-      <Sidebar
-        currentTab={currentTab}
-        onSelectTab={setCurrentTab}
-        orderCount={orders.length}
-        invoiceCount={invoices.length}
-        unprintedBarcodeCount={unprintedBarcodeCount}
-        pendingWarrantyCount={pendingWarrantyCount}
-        pendingTransferCount={pendingTransferCount}
-      />
+    <div className="flex h-screen bg-black text-zinc-100 font-sans antialiased overflow-hidden flex-col">
+      {/* Database Connection Error Banner if MongoDB Atlas is unavailable */}
+      {dbError && (
+        <div className="bg-red-950/90 border-b border-red-800 text-red-200 px-6 py-3 flex items-center justify-between text-sm z-50 shadow-lg">
+          <div className="flex items-center space-x-3">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+            <span className="font-semibold">{dbError}</span>
+          </div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="bg-red-900 hover:bg-red-800 text-white px-3 py-1 rounded text-xs font-medium border border-red-700 transition-colors"
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <Navbar
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar
           currentTab={currentTab}
-          outlets={outlets}
-          currentOutletId={currentOutletId}
-          onSelectOutlet={setCurrentOutletId}
-          onOpenSimulateOrder={() => setIsSimulateOrderOpen(true)}
-          onOpenAddProduct={() => setIsProductOpen(true)}
-          onOpenAddExpense={() => setIsExpenseOpen(true)}
-          onOpenAddSupplier={() => setIsSupplierOpen(true)}
-          onOpenAddGRN={() => setIsGRNOpen(true)}
-          onOpenAddTransfer={() => setIsTransferOpen(true)}
-          onOpenAddInvoice={() => setIsInvoiceOpen(true)}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
+          onSelectTab={setCurrentTab}
+          orderCount={orders.length}
+          invoiceCount={invoices.length}
+          unprintedBarcodeCount={unprintedBarcodeCount}
+          pendingWarrantyCount={pendingWarrantyCount}
+          pendingTransferCount={pendingTransferCount}
         />
 
-        <main className="flex-1 pb-16">
-          {currentTab === 'dashboard' && (
-            <DashboardTab
-              orders={orders}
-              products={products}
-              expenses={expenses}
-              outlets={outlets}
-              currentOutletId={currentOutletId}
-            />
-          )}
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+          <Navbar
+            currentTab={currentTab}
+            outlets={outlets}
+            currentOutletId={currentOutletId}
+            onSelectOutlet={setCurrentOutletId}
+            onOpenSimulateOrder={() => setIsSimulateOrderOpen(true)}
+            onOpenAddProduct={() => setIsProductOpen(true)}
+            onOpenAddExpense={() => setIsExpenseOpen(true)}
+            onOpenAddSupplier={() => setIsSupplierOpen(true)}
+            onOpenAddGRN={() => setIsGRNOpen(true)}
+            onOpenAddTransfer={() => setIsTransferOpen(true)}
+            onOpenAddInvoice={() => setIsInvoiceOpen(true)}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+          />
 
-          {currentTab === 'orders' && (
-            <LiveOrdersTab
-              orders={orders}
-              outlets={outlets}
-              currentOutletId={currentOutletId}
-              onUpdateOrderStatus={handleUpdateOrderStatus}
-              onDeleteOrder={handleDeleteOrder}
-              onBulkDeleteOrders={handleBulkDeleteOrders}
-              onViewWaybill={(order) => {
-                setSelectedOrderForWaybill(order);
-                setIsWaybillOpen(true);
-              }}
-              searchTerm={searchTerm}
-            />
-          )}
+          <main className="flex-1 pb-16">
+            {currentTab === 'dashboard' && (
+              <DashboardTab
+                orders={orders}
+                products={products}
+                expenses={expenses}
+                outlets={outlets}
+                currentOutletId={currentOutletId}
+              />
+            )}
 
-          {currentTab === 'invoices' && (
-            <InvoicesTab
-              invoices={invoices}
-              outlets={outlets}
-              currentOutletId={currentOutletId}
-              onDeleteInvoice={handleDeleteInvoice}
-              onOpenAddInvoice={() => setIsInvoiceOpen(true)}
-              searchTerm={searchTerm}
-            />
-          )}
+            {currentTab === 'orders' && (
+              <LiveOrdersTab
+                orders={orders}
+                outlets={outlets}
+                currentOutletId={currentOutletId}
+                onUpdateOrderStatus={handleUpdateOrderStatus}
+                onDeleteOrder={handleDeleteOrder}
+                onBulkDeleteOrders={handleBulkDeleteOrders}
+                onViewWaybill={(order) => {
+                  setSelectedOrderForWaybill(order);
+                  setIsWaybillOpen(true);
+                }}
+                searchTerm={searchTerm}
+              />
+            )}
 
-          {currentTab === 'products' && (
-            <ProductsTab
-              products={products}
-              suppliers={suppliers}
-              outlets={outlets}
-              grns={grns}
-              currentOutletId={currentOutletId}
-              onDeleteProduct={handleDeleteProduct}
-              onOpenAddProduct={() => setIsProductOpen(true)}
-              onOpenAddGRN={() => setIsGRNOpen(true)}
-              searchTerm={searchTerm}
-            />
-          )}
+            {currentTab === 'invoices' && (
+              <InvoicesTab
+                invoices={invoices}
+                outlets={outlets}
+                currentOutletId={currentOutletId}
+                onDeleteInvoice={handleDeleteInvoice}
+                onOpenAddInvoice={() => setIsInvoiceOpen(true)}
+                searchTerm={searchTerm}
+              />
+            )}
 
-          {currentTab === 'barcodes' && (
-            <BarcodeManagerTab
-              barcodes={barcodes}
-              onTogglePrinted={handleToggleBarcodePrinted}
-              onBulkMarkPrinted={handleBulkMarkBarcodesPrinted}
-              searchTerm={searchTerm}
-            />
-          )}
+            {currentTab === 'products' && (
+              <ProductsTab
+                products={products}
+                suppliers={suppliers}
+                outlets={outlets}
+                grns={grns}
+                currentOutletId={currentOutletId}
+                onDeleteProduct={handleDeleteProduct}
+                onOpenAddProduct={() => setIsProductOpen(true)}
+                onOpenAddGRN={() => setIsGRNOpen(true)}
+                searchTerm={searchTerm}
+              />
+            )}
 
-          {currentTab === 'transfers' && (
-            <TransfersTab
-              transfers={transfers}
-              outlets={outlets}
-              onUpdateTransferStatus={handleUpdateTransferStatus}
-              onOpenAddTransfer={() => setIsTransferOpen(true)}
-            />
-          )}
+            {currentTab === 'barcodes' && (
+              <BarcodeManagerTab
+                barcodes={barcodes}
+                onTogglePrinted={handleToggleBarcodePrinted}
+                onBulkMarkPrinted={handleBulkMarkBarcodesPrinted}
+                searchTerm={searchTerm}
+              />
+            )}
 
-          {currentTab === 'suppliers' && (
-            <SuppliersWarrantyTab
-              suppliers={suppliers}
-              warranties={warranties}
-              onDeleteSupplier={handleDeleteSupplier}
-              onUpdateWarrantyStatus={handleUpdateWarrantyStatus}
-              onOpenAddSupplier={() => setIsSupplierOpen(true)}
-              onOpenAddWarranty={() => setIsWarrantyOpen(true)}
-              searchTerm={searchTerm}
-            />
-          )}
+            {currentTab === 'transfers' && (
+              <TransfersTab
+                transfers={transfers}
+                outlets={outlets}
+                onUpdateTransferStatus={handleUpdateTransferStatus}
+                onOpenAddTransfer={() => setIsTransferOpen(true)}
+              />
+            )}
 
-          {currentTab === 'expenses' && (
-            <ExpensesTab
-              expenses={expenses}
-              orders={orders}
-              outlets={outlets}
-              currentOutletId={currentOutletId}
-              onDeleteExpense={handleDeleteExpense}
-              onOpenAddExpense={() => setIsExpenseOpen(true)}
-              searchTerm={searchTerm}
-            />
-          )}
+            {currentTab === 'suppliers' && (
+              <SuppliersWarrantyTab
+                suppliers={suppliers}
+                warranties={warranties}
+                onDeleteSupplier={handleDeleteSupplier}
+                onUpdateWarrantyStatus={handleUpdateWarrantyStatus}
+                onOpenAddSupplier={() => setIsSupplierOpen(true)}
+                onOpenAddWarranty={() => setIsWarrantyOpen(true)}
+                searchTerm={searchTerm}
+              />
+            )}
 
-          {currentTab === 'integrations' && (
-            <IntegrationsTab
-              integrations={integrations}
-              smsConfig={smsConfig}
-              onSaveIntegrations={setIntegrations}
-              onSaveSmsConfig={setSmsConfig}
-              onRunTestSuite={() => alert('Running full integration test suite...')}
-            />
-          )}
+            {currentTab === 'expenses' && (
+              <ExpensesTab
+                expenses={expenses}
+                orders={orders}
+                outlets={outlets}
+                currentOutletId={currentOutletId}
+                onDeleteExpense={handleDeleteExpense}
+                onOpenAddExpense={() => setIsExpenseOpen(true)}
+                searchTerm={searchTerm}
+              />
+            )}
 
-          {currentTab === 'sms' && (
-            <SmsGatewayTab
-              smsConfig={smsConfig}
-              onSaveSmsConfig={setSmsConfig}
-            />
-          )}
+            {currentTab === 'integrations' && (
+              <IntegrationsTab
+                integrations={integrations}
+                smsConfig={smsConfig}
+                onSaveIntegrations={setIntegrations}
+                onSaveSmsConfig={setSmsConfig}
+                onRunTestSuite={() => alert('Running full integration test suite...')}
+              />
+            )}
 
-          {currentTab === 'audit' && (
-            <AuditTab auditLogs={auditLogs} />
-          )}
-        </main>
+            {currentTab === 'sms' && (
+              <SmsGatewayTab
+                smsConfig={smsConfig}
+                onSaveSmsConfig={setSmsConfig}
+              />
+            )}
+
+            {currentTab === 'audit' && (
+              <AuditTab auditLogs={auditLogs} />
+            )}
+          </main>
+        </div>
       </div>
 
       {/* Modals */}
