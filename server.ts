@@ -126,7 +126,7 @@ async function startServer() {
   app.get('/api/health/database', async (req, res) => {
     try {
       const health = await checkDatabaseHealth();
-      if (health.status === 'healthy') {
+      if (health.status === 'healthy' || health.status === 'fallback') {
         res.status(200).json(health);
       } else {
         res.status(503).json(health);
