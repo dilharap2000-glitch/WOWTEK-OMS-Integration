@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Package, Plus, Trash2, Pencil, AlertCircle, RefreshCw, Database } from 'lucide-react';
+import { Package, Plus, Trash2, Pencil, RefreshCw, Database, Printer, CheckSquare, Square } from 'lucide-react';
 import { ProductItem, Supplier, GRNEntry, Outlet } from '../types';
 import { formatCurrency } from '../utils/storage';
+import { PrintBarcodesModal } from './PrintBarcodesModal';
 
 interface ProductsTabProps {
   products: ProductItem[];
@@ -33,6 +34,8 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
   onRetryConnection,
 }) => {
   const [activeTab, setActiveTab] = useState<'catalog' | 'grns'>('catalog');
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = 
@@ -42,7 +45,23 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
     return matchesSearch;
   });
 
-  const getOutletName = (id: string) => outlets.find(o => o.id === id)?.name || 'Outlet';
+  const handleSelectAll = () => {
+    if (selectedProductIds.length === filteredProducts.length) {
+      setSelectedProductIds([]);
+    } else {
+      setSelectedProductIds(filteredProducts.map(p => p.id));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    if (selectedProductIds.includes(id)) {
+      setSelectedProductIds(selectedProductIds.filter(i => i !== id));
+    } else {
+      setSelectedProductIds([...selectedProductIds, id]);
+    }
+  };
+
+  const selectedProductsForPrint = products.filter(p => selectedProductIds.includes(p.id));
 
   return (
     <div className="p-8 space-y-6">
@@ -77,6 +96,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         </div>
       )}
 
+      {/* Action Controls & Multi-Select Barcode Trigger */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center space-x-2">
           <button
@@ -102,6 +122,17 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
+          {/* Prominent Print Barcodes Button shown when 1 or more items are selected */}
+          {selectedProductIds.length > 0 && (
+            <button
+              onClick={() => setIsPrintModalOpen(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-purple-600/30 transition-all cursor-pointer animate-in fade-in"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Print Barcodes ({selectedProductIds.length})</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenAddProduct}
             className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer"
@@ -111,7 +142,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           </button>
           <button
             onClick={onOpenAddGRN}
-            className="flex items-center space-x-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-4 py-2.5 rounded-xl text-sm font-medium shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
+            className="flex items-center space-x-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create GRN (Stock Batch)</span>
@@ -124,6 +155,15 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           <table className="w-full text-left text-sm">
             <thead className="bg-zinc-900/80 text-zinc-400 text-xs uppercase font-semibold border-b border-zinc-800">
               <tr>
+                <th className="px-4 py-4 w-12 text-center">
+                  <input
+                    type="checkbox"
+                    checked={filteredProducts.length > 0 && selectedProductIds.length === filteredProducts.length}
+                    onChange={handleSelectAll}
+                    className="rounded border-zinc-700 text-purple-600 focus:ring-purple-500 bg-zinc-800 cursor-pointer"
+                    title="Select All"
+                  />
+                </th>
                 <th className="px-6 py-4">SKU / Product Name</th>
                 <th className="px-6 py-4">Category</th>
                 <th className="px-6 py-4">Supplier</th>
@@ -136,8 +176,23 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
               {filteredProducts.length > 0 ? (
                 filteredProducts.map(prod => {
                   const sup = suppliers.find(s => s.id === prod.supplierId);
+                  const isSelected = selectedProductIds.includes(prod.id);
                   return (
-                    <tr key={prod.id} className="hover:bg-zinc-900/60 transition-colors">
+                    <tr 
+                      key={prod.id} 
+                      onClick={() => handleToggleSelect(prod.id)}
+                      className={`transition-colors cursor-pointer ${
+                        isSelected ? 'bg-purple-950/20' : 'hover:bg-zinc-900/60'
+                      }`}
+                    >
+                      <td className="px-4 py-4 text-center" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelect(prod.id)}
+                          className="rounded border-zinc-700 text-purple-600 focus:ring-purple-500 bg-zinc-800 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-6 py-4">
                         <div className="font-bold text-white mb-0.5">{prod.name}</div>
                         <span className="font-mono text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
@@ -166,12 +221,12 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                           ))}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-right space-x-1">
+                      <td className="px-6 py-4 text-right space-x-1" onClick={e => e.stopPropagation()}>
                         {onEditProduct && (
                           <button
                             onClick={() => onEditProduct(prod)}
                             className="text-zinc-400 hover:text-purple-300 p-2 rounded-lg hover:bg-zinc-900 transition-colors"
-                            title="Edit Product (PUT /api/products/:id)"
+                            title="Edit Product"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
@@ -179,7 +234,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                         <button
                           onClick={() => onDeleteProduct(prod.id)}
                           className="text-zinc-500 hover:text-red-400 p-2 rounded-lg hover:bg-zinc-900 transition-colors"
-                          title="Delete Product (DELETE /api/products/:id)"
+                          title="Delete Product"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -189,7 +244,7 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="text-center py-16 text-zinc-500">
+                  <td colSpan={7} className="text-center py-16 text-zinc-500">
                     <Package className="w-12 h-12 mx-auto mb-3 text-zinc-700" />
                     <p className="text-sm font-medium text-zinc-400">No products in catalog</p>
                     <p className="text-xs text-zinc-600 mt-1 max-w-sm mx-auto">
@@ -256,6 +311,13 @@ export const ProductsTab: React.FC<ProductsTabProps> = ({
           </table>
         </div>
       )}
+
+      {/* Barcode Print Modal */}
+      <PrintBarcodesModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        selectedProducts={selectedProductsForPrint}
+      />
     </div>
   );
 };

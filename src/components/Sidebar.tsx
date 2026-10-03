@@ -63,12 +63,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: { id: TabType; label: string; icon: React.ReactNode; badge?: number }[] = [
     { 
       id: 'dashboard', 
-      label: 'Executive Dashboard', 
+      label: 'Sales Analytics & Dashboard', 
       icon: <LayoutDashboard className="w-5 h-5" /> 
     },
     { 
+      id: 'products', 
+      label: 'Products & Barcode Printing', 
+      icon: <Package className="w-5 h-5" /> 
+    },
+    { 
       id: 'orders', 
-      label: 'Live Orders & Sync', 
+      label: 'Live Orders & Courier Waybills', 
       icon: <ShoppingBag className="w-5 h-5" />,
       badge: orderCount > 0 ? orderCount : undefined
     },
@@ -79,15 +84,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: invoiceCount > 0 ? invoiceCount : undefined
     },
     { 
+      id: 'integrations', 
+      label: 'API & Courier Integrations', 
+      icon: <Sliders className="w-5 h-5" /> 
+    },
+    { 
+      id: 'suppliers', 
+      label: 'Suppliers & Warranty Tracker', 
+      icon: <ShieldCheck className="w-5 h-5" />,
+      badge: pendingWarrantyCount > 0 ? pendingWarrantyCount : undefined
+    },
+    { 
+      id: 'expenses', 
+      label: 'Expenses & Financial Breakdown', 
+      icon: <DollarSign className="w-5 h-5" /> 
+    },
+    { 
       id: 'waybills', 
       label: 'Trans Express Waybills', 
       icon: <Truck className="w-5 h-5" />,
       badge: pendingWaybillCount > 0 ? pendingWaybillCount : undefined
     },
     { 
-      id: 'products', 
-      label: 'Products & Bulk GRN', 
-      icon: <Package className="w-5 h-5" /> 
+      id: 'sms', 
+      label: 'SMS Gateway Settings', 
+      icon: <MessageSquare className="w-5 h-5" /> 
     },
     { 
       id: 'barcodes', 
@@ -100,27 +121,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Stock Transfers', 
       icon: <ArrowLeftRight className="w-5 h-5" />,
       badge: pendingTransferCount > 0 ? pendingTransferCount : undefined
-    },
-    { 
-      id: 'suppliers', 
-      label: 'Warranty & Claims', 
-      icon: <ShieldCheck className="w-5 h-5" />,
-      badge: pendingWarrantyCount > 0 ? pendingWarrantyCount : undefined
-    },
-    { 
-      id: 'expenses', 
-      label: 'Expenses & Profit', 
-      icon: <DollarSign className="w-5 h-5" /> 
-    },
-    { 
-      id: 'integrations', 
-      label: 'API Integrations', 
-      icon: <Sliders className="w-5 h-5" /> 
-    },
-    { 
-      id: 'sms', 
-      label: 'SMS Gateway Settings', 
-      icon: <MessageSquare className="w-5 h-5" /> 
     },
     { 
       id: 'audit', 
