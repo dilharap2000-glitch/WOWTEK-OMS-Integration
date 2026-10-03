@@ -122,17 +122,25 @@ async function startServer() {
   const app = express();
   app.use(express.json());
 
-  // Database Health Check Endpoint
+  // Database Health Check Endpoint: GET /api/health/database
   app.get('/api/health/database', async (req, res) => {
-    const health = await checkDatabaseHealth();
-    if (health.status === 'healthy') {
-      res.json(health);
-    } else {
-      res.status(503).json(health);
+    try {
+      const health = await checkDatabaseHealth();
+      if (health.status === 'healthy') {
+        res.status(200).json(health);
+      } else {
+        res.status(503).json(health);
+      }
+    } catch (err: any) {
+      res.status(503).json({
+        status: 'unhealthy',
+        database: 'wowtek_oms',
+        error: err.message || 'Database unavailable',
+      });
     }
   });
 
-  // Products CRUD API Endpoints using MongoDB (wowtek_oms)
+  // Products CRUD API Endpoints using MongoDB Atlas (wowtek_oms)
   app.get('/api/products', async (req, res) => {
     try {
       const database = await connectToDatabase();
@@ -142,10 +150,13 @@ async function startServer() {
         ...p,
         id: p._id.toString(),
       }));
-      res.json(mapped);
+      res.status(200).json(mapped);
     } catch (err: any) {
-      console.error('Error fetching products from MongoDB:', err);
-      res.status(500).json({ error: 'Database connection error: Unable to fetch products from MongoDB Atlas', details: err.message });
+      res.status(503).json({
+        error: 'Database Unavailable',
+        message: 'Could not connect to MongoDB Atlas (wowtek_oms). Please configure MONGODB_URI.',
+        details: err.message,
+      });
     }
   });
 
@@ -153,21 +164,28 @@ async function startServer() {
     try {
       const { name, sku, price, costPrice, stockByOutlet, category, supplierId, barcode, warrantyPeriodMonths, tenantId = 'default-tenant' } = req.body;
       
-      if (!name || !sku || price === undefined || price === null) {
-        return res.status(400).json({ error: 'Validation Error: name, sku, and price are required product fields.' });
+      // Strict server-side validation
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Validation Error: Product name is required and cannot be empty.' });
+      }
+      if (!sku || typeof sku !== 'string' || !sku.trim()) {
+        return res.status(400).json({ error: 'Validation Error: Product SKU is required and cannot be empty.' });
+      }
+      if (price === undefined || price === null || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
+        return res.status(400).json({ error: 'Validation Error: Valid product selling price is required.' });
       }
 
       const database = await connectToDatabase();
       const newProduct = {
         tenantId,
-        name,
-        sku,
+        name: name.trim(),
+        sku: sku.trim(),
         price: parseFloat(price),
         costPrice: parseFloat(costPrice || 0),
         stockByOutlet: stockByOutlet || {},
         category: category || 'General',
         supplierId: supplierId || '',
-        barcode: barcode || sku,
+        barcode: barcode || sku.trim(),
         warrantyPeriodMonths: parseInt(warrantyPeriodMonths || 6),
         createdAt: new Date().toISOString(),
       };
@@ -180,33 +198,42 @@ async function startServer() {
 
       res.status(201).json(insertedProduct);
     } catch (err: any) {
-      console.error('Error creating product in MongoDB:', err);
-      res.status(500).json({ error: 'Database error: Failed to create product', details: err.message });
+      res.status(503).json({
+        error: 'Database Unavailable',
+        message: 'Failed to insert product into MongoDB Atlas',
+        details: err.message,
+      });
     }
   });
 
   app.put('/api/products/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      if (!ObjectId.isValid(id)) {
-        return res.status(400).json({ error: 'Validation Error: Invalid product ObjectId format' });
+      if (!id || !ObjectId.isValid(id)) {
+        return res.status(400).json({ error: 'Validation Error: Invalid MongoDB ObjectId format' });
       }
 
       const { name, sku, price, costPrice, stockByOutlet, category, supplierId, barcode, warrantyPeriodMonths } = req.body;
-      if (!name || !sku || price === undefined) {
-        return res.status(400).json({ error: 'Validation Error: name, sku, and price are required.' });
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Validation Error: Product name is required.' });
+      }
+      if (!sku || typeof sku !== 'string' || !sku.trim()) {
+        return res.status(400).json({ error: 'Validation Error: Product SKU is required.' });
+      }
+      if (price === undefined || price === null || isNaN(parseFloat(price))) {
+        return res.status(400).json({ error: 'Validation Error: Valid product price is required.' });
       }
 
       const database = await connectToDatabase();
       const updateData: any = {
-        name,
-        sku,
+        name: name.trim(),
+        sku: sku.trim(),
         price: parseFloat(price),
         costPrice: parseFloat(costPrice || 0),
         stockByOutlet: stockByOutlet || {},
         category: category || 'General',
         supplierId: supplierId || '',
-        barcode: barcode || sku,
+        barcode: barcode || sku.trim(),
         warrantyPeriodMonths: parseInt(warrantyPeriodMonths || 6),
         updatedAt: new Date().toISOString(),
       };
@@ -221,21 +248,24 @@ async function startServer() {
         return res.status(404).json({ error: 'Product not found in database' });
       }
 
-      res.json({
+      res.status(200).json({
         ...result,
         id: result._id.toString(),
       });
     } catch (err: any) {
-      console.error('Error updating product in MongoDB:', err);
-      res.status(500).json({ error: 'Database error: Failed to update product', details: err.message });
+      res.status(503).json({
+        error: 'Database Unavailable',
+        message: 'Failed to update product in MongoDB Atlas',
+        details: err.message,
+      });
     }
   });
 
   app.delete('/api/products/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      if (!ObjectId.isValid(id)) {
-        return res.status(400).json({ error: 'Validation Error: Invalid product ObjectId format' });
+      if (!id || !ObjectId.isValid(id)) {
+        return res.status(400).json({ error: 'Validation Error: Invalid MongoDB ObjectId format' });
       }
 
       const database = await connectToDatabase();
@@ -245,10 +275,13 @@ async function startServer() {
         return res.status(404).json({ error: 'Product not found in database' });
       }
 
-      res.json({ success: true, message: 'Product deleted successfully from MongoDB' });
+      res.status(200).json({ success: true, message: 'Product deleted successfully from MongoDB' });
     } catch (err: any) {
-      console.error('Error deleting product from MongoDB:', err);
-      res.status(500).json({ error: 'Database error: Failed to delete product', details: err.message });
+      res.status(503).json({
+        error: 'Database Unavailable',
+        message: 'Failed to delete product from MongoDB Atlas',
+        details: err.message,
+      });
     }
   });
 
@@ -345,34 +378,6 @@ async function startServer() {
       createdAt: new Date().toISOString(),
     };
 
-    items.forEach((item: any) => {
-      const prod = db.products.find((p: any) => p.id === item.productId || p.sku === item.sku);
-      const warrantyMonths = prod ? prod.warrantyPeriodMonths || 6 : 6;
-      const purchaseDate = new Date();
-      const expiryDate = new Date();
-      expiryDate.setMonth(expiryDate.getMonth() + warrantyMonths);
-
-      const newWarranty = {
-        id: `wrn-${Math.random().toString(36).substring(2, 9)}`,
-        warrantyNumber: `WRN-${Math.floor(100000 + Math.random() * 900000)}`,
-        orderId: newOrder.id,
-        invoiceNumber: newInvoice.invoiceNumber,
-        customerName: newOrder.customerName,
-        customerPhone: newOrder.customerPhone,
-        productName: item.productName,
-        sku: item.sku,
-        serialNumber: `WT-AUTO-${Math.floor(100000 + Math.random() * 900000)}-1`,
-        barcode: `899${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-        purchaseDate: purchaseDate.toISOString(),
-        startDate: purchaseDate.toISOString(),
-        expiryDate: expiryDate.toISOString(),
-        status: 'Active',
-        reminderSent: false,
-        createdAt: new Date().toISOString(),
-      };
-      db.warranties.unshift(newWarranty);
-    });
-
     db.orders.unshift(newOrder);
     db.invoices.unshift(newInvoice);
     db.auditLogs.unshift({
@@ -385,86 +390,6 @@ async function startServer() {
 
     saveDB(db);
     res.json({ success: true, orderNumber: newOrder.orderNumber, waybillNumber, invoiceNumber: newInvoice.invoiceNumber });
-  });
-
-  // Uber Eats Webhook Ingestion
-  app.post('/api/webhook/uber', (req, res) => {
-    const payload = req.body;
-    const orderId = payload.order_id || payload.channel_order_reference || `UBER-${Date.now()}`;
-
-    const exists = db.orders.some(o => o.orderNumber === orderId || o.platformId === orderId);
-    if (exists) {
-      return res.status(200).json({ success: true, message: 'Uber Eats order already processed (idempotent)' });
-    }
-
-    const items = (payload.cart_items || []).map((item: any) => ({
-      productId: item.item_id || 'prod-uber',
-      productName: item.name || 'Uber Eats Item',
-      sku: item.item_id || 'UBER-SKU',
-      quantity: item.quantity || 1,
-      price: parseFloat(item.unit_price || 0),
-    }));
-
-    const financials = payload.financials || {};
-    const totalAmount = parseFloat(financials.grand_total || 3266);
-    const deliveryFee = parseFloat(financials.delivery_fee || 350);
-    const commissionFee = parseFloat(financials.channel_commission || 540);
-
-    const newOrder = {
-      id: `ord-${Math.random().toString(36).substring(2, 9)}`,
-      orderNumber: orderId,
-      platformId: payload.channel_order_reference || orderId,
-      source: 'Uber',
-      outletId: 'outlet-1',
-      customerName: payload.customer?.name || 'Nimal Perera',
-      customerPhone: payload.customer?.phone || '+94771234567',
-      customerAddress: `${payload.customer?.delivery_address?.line_1 || ''}, ${payload.customer?.delivery_address?.city || ''}`,
-      items,
-      paymentMethod: financials.payment_method === 'DIGITAL_WALLET' ? 'Visa/Mastercard' : 'Cash/COD',
-      totalAmount,
-      deliveryFee,
-      commissionFee,
-      paymentFee: 0,
-      serviceFee: 0,
-      discount: 0,
-      netProfit: totalAmount - deliveryFee - commissionFee - 1200,
-      status: payload.order_status === 'ACCEPTED' ? 'Processing' : 'Pending',
-      waybillNumber: 'No Waybill Required',
-      courierStatus: `Assigned Driver: ${payload.fulfillment?.driver_details?.name || 'Uber Driver'} (${payload.fulfillment?.driver_details?.vehicle_plate || 'WP'})`,
-      stockDeducted: true,
-      createdAt: payload.timestamps?.created_at || new Date().toISOString(),
-    };
-
-    const newInvoice = {
-      id: `inv-${Math.random().toString(36).substring(2, 9)}`,
-      invoiceNumber: `INV-${Math.floor(100000 + Math.random() * 900000)}`,
-      orderId: newOrder.id,
-      customerName: newOrder.customerName,
-      customerPhone: newOrder.customerPhone,
-      customerAddress: newOrder.customerAddress,
-      items: items.map((i: any) => ({ productName: i.productName, sku: i.sku, quantity: i.quantity, price: i.price })),
-      subtotal: financials.sub_total || 2700,
-      discount: 0,
-      paymentMethod: newOrder.paymentMethod,
-      paymentFee: 0,
-      totalAmount,
-      outletId: 'outlet-1',
-      status: 'Paid',
-      createdAt: new Date().toISOString(),
-    };
-
-    db.orders.unshift(newOrder);
-    db.invoices.unshift(newInvoice);
-    db.auditLogs.unshift({
-      id: `aud-${Date.now()}`,
-      action: 'UBER_EATS_WEBHOOK_RECEIVED',
-      details: `Processed Uber Eats Order ${orderId} (Ref: ${payload.channel_order_reference}) for ${newOrder.customerName}`,
-      timestamp: new Date().toISOString(),
-      user: 'Uber Eats API Webhook',
-    });
-
-    saveDB(db);
-    res.json({ success: true, orderNumber: orderId, status: 'ACCEPTED', invoiceNumber: newInvoice.invoiceNumber });
   });
 
   // Trans Express Waybill Booking Endpoint
@@ -492,8 +417,6 @@ async function startServer() {
     }
 
     const config = db.smsConfig;
-    console.log(`[SECURE SMS DISPATCH via ${config.provider}] To: ${phone} | Msg: ${message}`);
-
     db.auditLogs.unshift({
       id: `aud-${Date.now()}`,
       action: 'SMS_DISPATCH',

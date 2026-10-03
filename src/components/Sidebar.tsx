@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, 
   Package, 
@@ -10,7 +10,9 @@ import {
   Boxes,
   ArrowLeftRight,
   LayoutDashboard,
-  FileText
+  FileText,
+  Sliders,
+  Database
 } from 'lucide-react';
 import { TabType } from '../types';
 
@@ -19,6 +21,7 @@ interface SidebarProps {
   onSelectTab: (tab: TabType) => void;
   orderCount: number;
   invoiceCount: number;
+  pendingWaybillCount?: number;
   unprintedBarcodeCount: number;
   pendingWarrantyCount: number;
   pendingTransferCount: number;
@@ -29,10 +32,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   orderCount,
   invoiceCount,
+  pendingWaybillCount = 0,
   unprintedBarcodeCount,
   pendingWarrantyCount,
   pendingTransferCount,
 }) => {
+  const [dbStatus, setDbStatus] = useState<{ status: string; provider: string; isAtlas: boolean }>({
+    status: 'healthy',
+    provider: 'MongoDB Database',
+    isAtlas: false,
+  });
+
+  useEffect(() => {
+    fetch('/api/health/database')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.status) {
+          setDbStatus({
+            status: data.status,
+            provider: data.provider || 'wowtek_oms',
+            isAtlas: !!data.isAtlas,
+          });
+        }
+      })
+      .catch(() => {
+        // Safe fallback
+      });
+  }, []);
+
   const navItems: { id: TabType; label: string; icon: React.ReactNode; badge?: number }[] = [
     { 
       id: 'dashboard', 
@@ -50,6 +77,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Invoices & Billing', 
       icon: <FileText className="w-5 h-5" />,
       badge: invoiceCount > 0 ? invoiceCount : undefined
+    },
+    { 
+      id: 'waybills', 
+      label: 'Trans Express Waybills', 
+      icon: <Truck className="w-5 h-5" />,
+      badge: pendingWaybillCount > 0 ? pendingWaybillCount : undefined
     },
     { 
       id: 'products', 
@@ -70,18 +103,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     { 
       id: 'suppliers', 
-      label: 'Suppliers & Warranty', 
-      icon: <Truck className="w-5 h-5" />,
+      label: 'Warranty & Claims', 
+      icon: <ShieldCheck className="w-5 h-5" />,
       badge: pendingWarrantyCount > 0 ? pendingWarrantyCount : undefined
     },
     { 
       id: 'expenses', 
-      label: 'Expenses & Net Profit', 
+      label: 'Expenses & Profit', 
       icon: <DollarSign className="w-5 h-5" /> 
     },
     { 
+      id: 'integrations', 
+      label: 'API Integrations', 
+      icon: <Sliders className="w-5 h-5" /> 
+    },
+    { 
       id: 'sms', 
-      label: 'API & SMS Gateway', 
+      label: 'SMS Gateway Settings', 
       icon: <MessageSquare className="w-5 h-5" /> 
     },
     { 
@@ -112,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Navigation Links */}
       <nav className="flex-1 px-4 py-4 space-y-1.5 overflow-y-auto">
         <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-          Main Navigation
+          Core OMS Navigation
         </div>
         {navItems.map((item) => {
           const isActive = currentTab === item.id;
@@ -120,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group cursor-pointer ${
                 isActive
                   ? 'bg-purple-600/15 text-purple-300 border border-purple-500/30 shadow-sm shadow-purple-900/20'
                   : 'text-zinc-400 hover:bg-zinc-900/80 hover:text-zinc-200'
@@ -148,15 +186,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* System Status Footer */}
       <div className="p-4 m-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-xs">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-1.5">
           <span className="text-zinc-400 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            MongoDB Atlas
+            <Database className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="truncate max-w-[130px]">
+              {dbStatus.isAtlas ? 'MongoDB Atlas' : 'Local Persistent DB'}
+            </span>
           </span>
-          <span className="text-emerald-400 font-medium">Connected</span>
+          <span className="text-emerald-400 font-medium text-[11px]">Active</span>
         </div>
-        <div className="text-[11px] text-zinc-500">
-          Multi-Outlet ERP v3.2 Active
+        <div className="text-[11px] text-zinc-500 flex justify-between">
+          <span>Database: wowtek_oms</span>
+          <span>v3.5 PRO</span>
         </div>
       </div>
     </aside>

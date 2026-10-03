@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { DashboardTab } from './components/DashboardTab';
 import { LiveOrdersTab } from './components/LiveOrdersTab';
 import { InvoicesTab } from './components/InvoicesTab';
+import { WaybillQueueTab } from './components/WaybillQueueTab';
 import { ProductsTab } from './components/ProductsTab';
 import { BarcodeManagerTab } from './components/BarcodeManagerTab';
 import { TransfersTab } from './components/TransfersTab';
@@ -88,11 +89,11 @@ export default function App() {
   const [currentOutletId, setCurrentOutletId] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Products from MongoDB Atlas via /api/products
+  // Products from MongoDB Atlas API (/api/products) - No localStorage business-data dependency
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [dbError, setDbError] = useState<string | null>(null);
 
-  // Persistent States (other collections)
+  // Persistent States
   const [outlets] = useState<Outlet[]>(() => loadStorage('wowtek_outlets', defaultOutlets));
   const [barcodes, setBarcodes] = useState<BarcodeLabel[]>(() => loadStorage('wowtek_barcodes', []));
   const [orders, setOrders] = useState<Order[]>(() => loadStorage('wowtek_orders', []));
@@ -106,27 +107,31 @@ export default function App() {
   const [smsConfig, setSmsConfig] = useState<SMSConfig>(() => loadStorage('wowtek_sms_config', initialSMSConfig));
   const [integrations, setIntegrations] = useState<IntegrationConfig>(() => loadStorage('wowtek_integrations', defaultIntegrations));
 
-  // Load products from MongoDB Atlas API on mount
-  useEffect(() => {
+  // Load products from MongoDB Atlas REST API
+  const loadProducts = () => {
     fetch('/api/products')
       .then(async res => {
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `Database error (${res.status})`);
+          throw new Error(errData.message || errData.error || `Database connection failed (HTTP ${res.status})`);
         }
         return res.json();
       })
       .then(data => {
-        setProducts(data);
+        setProducts(Array.isArray(data) ? data : []);
         setDbError(null);
       })
       .catch(err => {
-        console.error('Failed to load products from MongoDB Atlas:', err);
-        setDbError('Database Connection Error: Unable to fetch products from MongoDB Atlas (wowtek_oms). Please verify MONGODB_URI connection string.');
+        setDbError(err.message || 'Could not connect to MongoDB Atlas. Live products cannot be retrieved.');
+        setProducts([]); // Strict requirement: never fallback to mock data or localStorage
       });
+  };
+
+  useEffect(() => {
+    loadProducts();
   }, []);
 
-  // Sync other persistent states to localStorage
+  // Sync other state collections to localStorage (excluding products)
   useEffect(() => { saveStorage('wowtek_barcodes', barcodes); }, [barcodes]);
   useEffect(() => { saveStorage('wowtek_orders', orders); }, [orders]);
   useEffect(() => { saveStorage('wowtek_invoices', invoices); }, [invoices]);
@@ -157,6 +162,7 @@ export default function App() {
   const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
   const [isGRNOpen, setIsGRNOpen] = useState(false);
   const [isProductOpen, setIsProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<ProductItem | null>(null);
   const [isSupplierOpen, setIsSupplierOpen] = useState(false);
   const [isWarrantyOpen, setIsWarrantyOpen] = useState(false);
   const [isExpenseOpen, setIsExpenseOpen] = useState(false);
@@ -268,6 +274,16 @@ export default function App() {
     logAudit('ORDER_STATUS_UPDATE', `Order ${targetOrder?.orderNumber} status updated to ${status}`);
   };
 
+  const handleUpdateCourierStatus = (orderId: string, status: string) => {
+    setOrders(orders.map(o => o.id === orderId ? { ...o, courierStatus: status } : o));
+    logAudit('COURIER_STATUS_UPDATED', `Order ID ${orderId} courier status updated to ${status}`);
+  };
+
+  const handleBulkUpdateCourierStatus = (orderIds: string[], status: string) => {
+    setOrders(orders.map(o => orderIds.includes(o.id) ? { ...o, courierStatus: status } : o));
+    logAudit('BULK_COURIER_DISPATCHED', `Dispatched ${orderIds.length} orders via Trans Express`);
+  };
+
   const handleDeleteOrder = (orderId: string) => {
     if (confirm('Are you sure you want to delete this order?')) {
       const target = orders.find(o => o.id === orderId);
@@ -281,10 +297,10 @@ export default function App() {
     logAudit('BULK_ORDERS_DELETED', `Deleted ${orderIds.length} orders`);
   };
 
-  // Product CRUD using MongoDB Atlas API (/api/products)
+  // Products CRUD with MongoDB Atlas (GET, POST, PUT, DELETE)
   const handleSaveProduct = async (product: ProductItem) => {
     try {
-      const isExisting = products.some(p => p.id === product.id);
+      const isExisting = editingProduct || products.some(p => p.id === product.id);
       const url = isExisting ? `/api/products/${product.id}` : '/api/products';
       const method = isExisting ? 'PUT' : 'POST';
 
@@ -295,8 +311,8 @@ export default function App() {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to save product in MongoDB');
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || errData.error || `Failed to save product in MongoDB (HTTP ${res.status})`);
       }
 
       const saved = await res.json();
@@ -307,8 +323,10 @@ export default function App() {
         setProducts([saved, ...products]);
         logAudit('PRODUCT_CREATED', `Created product ${saved.name} (${saved.sku}) in MongoDB Atlas`);
       }
+      setEditingProduct(null);
+      setIsProductOpen(false);
     } catch (err: any) {
-      alert(`Database Error: ${err.message}`);
+      alert(`MongoDB Atlas Error: ${err.message}`);
     }
   };
 
@@ -319,16 +337,21 @@ export default function App() {
           method: 'DELETE',
         });
         if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || 'Failed to delete product from MongoDB');
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || `Failed to delete product (${res.status})`);
         }
         const prod = products.find(p => p.id === id);
         setProducts(products.filter(p => p.id !== id));
-        logAudit('PRODUCT_DELETED', `Deleted product ${prod?.name} from MongoDB Atlas`);
+        logAudit('PRODUCT_DELETED', `Deleted product ${prod?.name || id} from MongoDB Atlas`);
       } catch (err: any) {
-        alert(`Database Error: ${err.message}`);
+        alert(`MongoDB Delete Error: ${err.message}`);
       }
     }
+  };
+
+  const handleEditProduct = (product: ProductItem) => {
+    setEditingProduct(product);
+    setIsProductOpen(true);
   };
 
   const handleSaveGRN = (grn: GRNEntry, newBarcodes: BarcodeLabel[], updatedProds: ProductItem[]) => {
@@ -416,24 +439,33 @@ export default function App() {
   const unprintedBarcodeCount = barcodes.filter(b => !b.isPrinted).length;
   const pendingWarrantyCount = warranties.filter(w => w.status === 'Sent for Warranty' || w.status === 'Expiring Soon').length;
   const pendingTransferCount = transfers.filter(t => t.status === 'Pending').length;
+  const pendingWaybillCount = orders.filter(o => 
+    o.waybillNumber && 
+    o.waybillNumber !== 'No Waybill Required' && 
+    o.waybillNumber.startsWith('TE-') &&
+    o.courierStatus !== 'Dispatched' &&
+    o.courierStatus !== 'Delivered'
+  ).length;
 
   return (
     <div className="flex h-screen bg-black text-zinc-100 font-sans antialiased overflow-hidden flex-col">
-      {/* Database Connection Error Banner if MongoDB Atlas is unavailable */}
+      {/* Top Database Connection Error Banner */}
       {dbError && (
-        <div className="bg-red-950/90 border-b border-red-800 text-red-200 px-6 py-3 flex items-center justify-between text-sm z-50 shadow-lg">
-          <div className="flex items-center space-x-3">
-            <span className="flex h-3 w-3 relative">
+        <div className="bg-red-950 border-b border-red-800 text-red-200 px-6 py-2.5 flex items-center justify-between text-xs z-50 shadow-md">
+          <div className="flex items-center space-x-2.5">
+            <span className="flex h-2.5 w-2.5 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
             </span>
-            <span className="font-semibold">{dbError}</span>
+            <span className="font-semibold tracking-wide">
+              {dbError}
+            </span>
           </div>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="bg-red-900 hover:bg-red-800 text-white px-3 py-1 rounded text-xs font-medium border border-red-700 transition-colors"
+          <button
+            onClick={loadProducts}
+            className="bg-red-900/80 hover:bg-red-800 text-white px-3 py-1 rounded text-[11px] font-medium border border-red-700 transition-colors cursor-pointer"
           >
-            Retry Connection
+            Retry MongoDB
           </button>
         </div>
       )}
@@ -445,6 +477,7 @@ export default function App() {
           onSelectTab={setCurrentTab}
           orderCount={orders.length}
           invoiceCount={invoices.length}
+          pendingWaybillCount={pendingWaybillCount}
           unprintedBarcodeCount={unprintedBarcodeCount}
           pendingWarrantyCount={pendingWarrantyCount}
           pendingTransferCount={pendingTransferCount}
@@ -458,7 +491,10 @@ export default function App() {
             currentOutletId={currentOutletId}
             onSelectOutlet={setCurrentOutletId}
             onOpenSimulateOrder={() => setIsSimulateOrderOpen(true)}
-            onOpenAddProduct={() => setIsProductOpen(true)}
+            onOpenAddProduct={() => {
+              setEditingProduct(null);
+              setIsProductOpen(true);
+            }}
             onOpenAddExpense={() => setIsExpenseOpen(true)}
             onOpenAddSupplier={() => setIsSupplierOpen(true)}
             onOpenAddGRN={() => setIsGRNOpen(true)}
@@ -506,6 +542,19 @@ export default function App() {
               />
             )}
 
+            {currentTab === 'waybills' && (
+              <WaybillQueueTab
+                orders={orders}
+                onUpdateCourierStatus={handleUpdateCourierStatus}
+                onBulkUpdateCourierStatus={handleBulkUpdateCourierStatus}
+                onViewWaybill={(order) => {
+                  setSelectedOrderForWaybill(order);
+                  setIsWaybillOpen(true);
+                }}
+                searchTerm={searchTerm}
+              />
+            )}
+
             {currentTab === 'products' && (
               <ProductsTab
                 products={products}
@@ -514,9 +563,15 @@ export default function App() {
                 grns={grns}
                 currentOutletId={currentOutletId}
                 onDeleteProduct={handleDeleteProduct}
-                onOpenAddProduct={() => setIsProductOpen(true)}
+                onEditProduct={handleEditProduct}
+                onOpenAddProduct={() => {
+                  setEditingProduct(null);
+                  setIsProductOpen(true);
+                }}
                 onOpenAddGRN={() => setIsGRNOpen(true)}
                 searchTerm={searchTerm}
+                dbError={dbError}
+                onRetryConnection={loadProducts}
               />
             )}
 
@@ -622,10 +677,14 @@ export default function App() {
 
       <ProductModal
         isOpen={isProductOpen}
-        onClose={() => setIsProductOpen(false)}
+        onClose={() => {
+          setIsProductOpen(false);
+          setEditingProduct(null);
+        }}
         suppliers={suppliers}
         outlets={outlets}
         onSaveProduct={handleSaveProduct}
+        initialProduct={editingProduct}
       />
 
       <SupplierModal

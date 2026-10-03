@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Package } from 'lucide-react';
 import { ProductItem, Supplier, Outlet } from '../types';
 import { generateId } from '../utils/storage';
@@ -9,6 +9,7 @@ interface ProductModalProps {
   suppliers: Supplier[];
   outlets: Outlet[];
   onSaveProduct: (product: ProductItem) => void;
+  initialProduct?: ProductItem | null;
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({
@@ -17,6 +18,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   suppliers,
   outlets,
   onSaveProduct,
+  initialProduct,
 }) => {
   const [sku, setSku] = useState(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
   const [name, setName] = useState('');
@@ -31,29 +33,56 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     'outlet-3': 2,
   });
 
+  useEffect(() => {
+    if (initialProduct) {
+      setSku(initialProduct.sku || '');
+      setName(initialProduct.name || '');
+      setCategory(initialProduct.category || 'Electronics');
+      setCostPrice(initialProduct.costPrice || 0);
+      setSellingPrice(initialProduct.sellingPrice || 0);
+      setSupplierId(initialProduct.supplierId || (suppliers[0]?.id || ''));
+      setWarrantyMonths(initialProduct.warrantyPeriodMonths || 6);
+      setInitialStock(initialProduct.stockByOutlet || {});
+    } else {
+      setSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
+      setName('');
+      setCategory('Electronics');
+      setCostPrice(0);
+      setSellingPrice(0);
+      setSupplierId(suppliers[0]?.id || '');
+      setWarrantyMonths(6);
+      setInitialStock({
+        'outlet-1': 5,
+        'outlet-2': 3,
+        'outlet-3': 2,
+      });
+    }
+  }, [initialProduct, isOpen, suppliers]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !supplierId) {
-      alert('Please fill in product name and select a supplier.');
+    if (!name) {
+      alert('Please fill in product name.');
       return;
     }
 
-    const newProduct: ProductItem = {
-      id: generateId('prod'),
-      sku,
-      name,
+    const productPayload: ProductItem = {
+      ...(initialProduct || {}),
+      id: initialProduct?.id || generateId('prod'),
+      sku: sku.trim(),
+      name: name.trim(),
       category,
-      costPrice,
-      sellingPrice,
+      costPrice: parseFloat(String(costPrice)) || 0,
+      sellingPrice: parseFloat(String(sellingPrice)) || 0,
       stockByOutlet: initialStock,
-      supplierId,
-      warrantyPeriodMonths: warrantyMonths,
-      createdAt: new Date().toISOString(),
+      supplierId: supplierId || (suppliers[0]?.id || ''),
+      warrantyPeriodMonths: parseInt(String(warrantyMonths)) || 6,
+      createdAt: initialProduct?.createdAt || new Date().toISOString(),
     };
 
-    onSaveProduct(newProduct);
+    onSaveProduct(productPayload);
     onClose();
   };
 
@@ -66,8 +95,12 @@ export const ProductModal: React.FC<ProductModalProps> = ({
               <Package className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-white">Add New Product</h3>
-              <p className="text-xs text-zinc-400">Create product item with multi-outlet initial stock</p>
+              <h3 className="text-lg font-bold text-white">
+                {initialProduct ? 'Edit Product' : 'Add New Product'}
+              </h3>
+              <p className="text-xs text-zinc-400">
+                {initialProduct ? 'Update product details in MongoDB Atlas' : 'Create product item with multi-outlet initial stock'}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 rounded-lg">
@@ -104,27 +137,51 @@ export const ProductModal: React.FC<ProductModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Product Name</label>
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Product Title / Name</label>
             <input
               type="text"
               required
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g. WOWTEK Ultra Fast GaN Charger 65W"
+              placeholder="e.g. WOWTEK 67W GaN Fast Charger"
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-purple-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Supplier</label>
-              <select
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Cost Price (LKR)</label>
+              <input
+                type="number"
                 required
+                min="0"
+                value={costPrice}
+                onChange={e => setCostPrice(parseFloat(e.target.value) || 0)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 font-mono focus:outline-none focus:border-purple-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Selling Price (LKR)</label>
+              <input
+                type="number"
+                required
+                min="0"
+                value={sellingPrice}
+                onChange={e => setSellingPrice(parseFloat(e.target.value) || 0)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 font-mono focus:outline-none focus:border-purple-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Primary Supplier</label>
+              <select
                 value={supplierId}
                 onChange={e => setSupplierId(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-purple-500"
               >
-                <option value="">Select Supplier...</option>
+                <option value="">Select Supplier</option>
                 {suppliers.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -137,69 +194,42 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                 min="0"
                 value={warrantyMonths}
                 onChange={e => setWarrantyMonths(parseInt(e.target.value) || 0)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Cost Price (LKR)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                value={costPrice}
-                onChange={e => setCostPrice(parseFloat(e.target.value) || 0)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Selling Price (LKR)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                value={sellingPrice}
-                onChange={e => setSellingPrice(parseFloat(e.target.value) || 0)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 focus:outline-none focus:border-purple-500"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm text-zinc-200 font-mono focus:outline-none focus:border-purple-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Initial Outlet Stock</label>
-            <div className="grid grid-cols-3 gap-3">
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Initial Stock Breakdown by Outlet</label>
+            <div className="space-y-2.5 bg-zinc-900/60 p-4 rounded-xl border border-zinc-800">
               {outlets.map(o => (
-                <div key={o.id} className="bg-zinc-900 border border-zinc-800 p-3 rounded-xl text-center">
-                  <span className="text-[11px] text-zinc-400 block mb-1 truncate">{o.name}</span>
+                <div key={o.id} className="flex items-center justify-between gap-4">
+                  <span className="text-xs text-zinc-300 truncate">{o.name} ({o.code}):</span>
                   <input
                     type="number"
                     min="0"
                     value={initialStock[o.id] || 0}
                     onChange={e => setInitialStock({ ...initialStock, [o.id]: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-1.5 text-center text-sm font-bold text-white focus:outline-none focus:border-purple-500"
+                    className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-sm text-right text-zinc-200 font-mono focus:outline-none focus:border-purple-500"
                   />
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t border-zinc-800">
+          <div className="flex items-center justify-end space-x-3 pt-4 border-t border-zinc-800/80">
             <button
               type="button"
               onClick={onClose}
-              className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 px-5 py-2.5 rounded-xl text-sm font-medium border border-zinc-800"
+              className="px-5 py-2.5 rounded-xl border border-zinc-800 text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white px-6 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-purple-600/25"
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-sm font-semibold shadow-lg shadow-purple-600/30 transition-all cursor-pointer"
             >
-              Save Product
+              {initialProduct ? 'Update Product in MongoDB' : 'Save to MongoDB Atlas'}
             </button>
           </div>
         </form>

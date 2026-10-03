@@ -8,9 +8,14 @@ const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'wowtek_oms';
 
 let client: MongoClient | null = null;
 let dbInstance: Db | null = null;
+let indexesCreated = false;
 
+/**
+ * Connect to MongoDB Atlas with connection pooling and safe reuse across requests.
+ * Database credentials are never exposed outside this server module.
+ */
 export async function connectToDatabase(): Promise<Db> {
-  if (dbInstance) {
+  if (dbInstance && client) {
     return dbInstance;
   }
 
@@ -24,33 +29,48 @@ export async function connectToDatabase(): Promise<Db> {
         maxPoolSize: 10,
         minPoolSize: 2,
         serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 10000,
       });
       await client.connect();
     }
 
     dbInstance = client.db(MONGODB_DB_NAME);
 
-    // Ensure collections and indexes exist
-    const productsCollection = dbInstance.collection('products');
-    await productsCollection.createIndex({ tenantId: 1, sku: 1 }, { unique: false, sparse: true });
-    await productsCollection.createIndex({ tenantId: 1, barcode: 1 }, { unique: false, sparse: true });
+    // Automatically create useful indexes on first connection
+    if (!indexesCreated) {
+      try {
+        const productsCollection = dbInstance.collection('products');
+        await productsCollection.createIndex({ tenantId: 1, sku: 1 }, { background: true });
+        await productsCollection.createIndex({ tenantId: 1, barcode: 1 }, { background: true });
+        indexesCreated = true;
+      } catch (idxErr) {
+        console.warn('Index initialization note:', idxErr);
+      }
+    }
 
-    console.log(`Successfully connected to MongoDB Atlas database: ${MONGODB_DB_NAME}`);
     return dbInstance;
-  } catch (error) {
-    console.error('Failed to connect to MongoDB Atlas:', error);
+  } catch (error: any) {
     client = null;
     dbInstance = null;
-    throw error;
+    throw new Error(`MongoDB connection failed: ${error.message || 'Unable to connect to cluster'}`);
   }
 }
 
-export async function checkDatabaseHealth(): Promise<{ status: string; database: string; latencyMs?: number; error?: string }> {
+/**
+ * Health check endpoint helper. Verifies MongoDB connection without exposing credentials.
+ */
+export async function checkDatabaseHealth(): Promise<{
+  status: 'healthy' | 'unhealthy';
+  database: string;
+  latencyMs?: number;
+  error?: string;
+}> {
   const startTime = Date.now();
   try {
     const db = await connectToDatabase();
     await db.command({ ping: 1 });
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Math.max(1, Date.now() - startTime);
+
     return {
       status: 'healthy',
       database: MONGODB_DB_NAME,
@@ -60,7 +80,7 @@ export async function checkDatabaseHealth(): Promise<{ status: string; database:
     return {
       status: 'unhealthy',
       database: MONGODB_DB_NAME,
-      error: error.message || 'Database connection failed',
+      error: error.message || 'Database connection error',
     };
   }
 }

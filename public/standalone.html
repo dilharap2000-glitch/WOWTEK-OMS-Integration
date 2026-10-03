@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WOWTEK Business & Order Management System</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      body { background: white !important; color: black !important; }
+    }
+    .print-only { display: none; }
+  </style>
+</head>
+<body class="bg-black text-zinc-100 font-sans antialiased overflow-hidden">
+  <div id="app" class="flex h-screen overflow-hidden">
+    <!-- Sidebar Navigation -->
+    <aside class="w-64 bg-zinc-950 border-r border-zinc-800 flex flex-col justify-between select-none shrink-0 no-print">
+      <div>
+        <div class="p-6 border-b border-zinc-800 flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 font-black text-xl">
+            W
+          </div>
+          <div>
+            <h1 class="font-bold text-base text-white tracking-wider flex items-center gap-1.5">
+              WOWTEK
+              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30">PRO</span>
+            </h1>
+            <p class="text-xs text-zinc-400">Order Management</p>
+          </div>
+        </div>
+
+        <nav class="p-4 space-y-1.5">
+          <button onclick="setTab('orders')" id="nav-orders" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-colors bg-purple-600/15 text-purple-300 border border-purple-500/30">
+            <span class="flex items-center gap-3">
+              <i data-lucide="shopping-bag" class="w-4 h-4 text-purple-400"></i>
+              Live Orders & Sync
+            </span>
+            <span id="badge-orders" class="text-xs px-2 py-0.5 rounded-full bg-purple-500 text-white font-semibold">0</span>
+          </button>
+
+          <button onclick="setTab('invoices')" id="nav-invoices" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200">
+            <span class="flex items-center gap-3">
+              <i data-lucide="file-text" class="w-4 h-4"></i>
+              Invoices & Billing
+            </span>
+            <span id="badge-invoices" class="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">0</span>
+          </button>
+
+          <button onclick="setTab('waybills')" id="nav-waybills" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200">
+            <span class="flex items-center gap-3">
+              <i data-lucide="truck" class="w-4 h-4"></i>
+              Trans Express Queue
+            </span>
+            <span id="badge-waybills" class="text-xs px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-800">0</span>
+          </button>
+
+          <button onclick="setTab('products')" id="nav-products" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200">
+            <span class="flex items-center gap-3">
+              <i data-lucide="package" class="w-4 h-4"></i>
+              Products & Bulk GRN
+            </span>
+          </button>
+
+          <button onclick="setTab('warranties')" id="nav-warranties" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200">
+            <span class="flex items-center gap-3">
+              <i data-lucide="shield-check" class="w-4 h-4"></i>
+              Warranty Tracker
+            </span>
+          </button>
+
+          <button onclick="setTab('expenses')" id="nav-expenses" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200">
+            <span class="flex items-center gap-3">
+              <i data-lucide="dollar-sign" class="w-4 h-4"></i>
+              Expenses & Net Profit
+            </span>
+          </button>
+
+          <button onclick="setTab('settings')" id="nav-settings" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200">
+            <span class="flex items-center gap-3">
+              <i data-lucide="settings" class="w-4 h-4"></i>
+              API & SMS Gateway
+            </span>
+          </button>
+        </nav>
+      </div>
+
+      <div class="p-4 m-4 rounded-xl bg-zinc-900 border border-zinc-800 text-xs">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-zinc-400 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            WOWTEK Engine
+          </span>
+          <span class="text-emerald-400 font-semibold">Active</span>
+        </div>
+        <p class="text-[11px] text-zinc-500">Auto-Sync & Logistics v3.5</p>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col min-w-0 overflow-y-auto">
+      <!-- Top Navbar -->
+      <header class="h-16 border-b border-zinc-800 px-8 flex items-center justify-between bg-zinc-950/80 backdrop-blur shrink-0 no-print">
+        <div class="flex items-center space-x-3">
+          <span id="tab-title" class="font-bold text-lg text-white">Live Orders & Sync</span>
+        </div>
+        <div class="flex items-center space-x-3">
+          <button onclick="openModal('simulate-modal')" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-lg shadow-purple-600/20 flex items-center gap-1.5 transition-all">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            Simulate Incoming Order
+          </button>
+          <button onclick="openModal('grn-modal')" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold px-4 py-2 rounded-xl border border-zinc-700 flex items-center gap-1.5 transition-all">
+            <i data-lucide="barcode" class="w-4 h-4"></i>
+            Bulk GRN Generator
+          </button>
+          <button onclick="openModal('invoice-modal')" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold px-4 py-2 rounded-xl border border-zinc-700 flex items-center gap-1.5 transition-all">
+            <i data-lucide="receipt" class="w-4 h-4"></i>
+            Manual Walk-in Invoice
+          </button>
+        </div>
+      </header>
+
+      <!-- View Containers -->
+      <div class="p-8 flex-1" id="view-container">
+        <!-- Rendered dynamically -->
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: Simulate Incoming Order -->
+  <div id="simulate-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+        <h3 class="font-bold text-white flex items-center gap-2">
+          <i data-lucide="shopping-bag" class="w-5 h-5 text-purple-400"></i>
+          Simulate Incoming Channel Order
+        </h3>
+        <button onclick="closeModal('simulate-modal')" class="text-zinc-400 hover:text-white">✕</button>
+      </div>
+
+      <form id="form-simulate" onsubmit="handleSimulateOrder(event)" class="space-y-4 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-400 mb-1">Source Channel</label>
+            <select id="sim-channel" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200" onchange="toggleWaybillNotice()">
+              <option value="Website">Website (WooCommerce)</option>
+              <option value="PickMe">PickMe Food</option>
+              <option value="Uber">Uber Eats</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-zinc-400 mb-1">Payment Method</label>
+            <select id="sim-payment" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+              <option value="Cash/COD">Cash / COD</option>
+              <option value="PayHere">PayHere (12% Fee)</option>
+              <option value="Koko">Koko Pay (12% Fee)</option>
+              <option value="Visa/Mastercard">Visa / Mastercard (12% Fee)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-zinc-400 mb-1">Customer Name</label>
+          <input type="text" id="sim-name" required value="Kasun Jayawardena" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-400 mb-1">Customer Phone</label>
+            <input type="text" id="sim-phone" required value="0771234567" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+          <div>
+            <label class="block text-zinc-400 mb-1">Delivery Address</label>
+            <input type="text" id="sim-address" required value="No 12, Flower Road, Colombo 07" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-zinc-400 mb-1">Selling Price (Rs.)</label>
+            <input type="number" id="sim-price" required value="4500" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+          <div>
+            <label class="block text-zinc-400 mb-1">Item Cost (Rs.)</label>
+            <input type="number" id="sim-cost" required value="2200" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+          <div>
+            <label class="block text-zinc-400 mb-1">Shipping Fee (Rs.)</label>
+            <input type="number" id="sim-shipping" required value="450" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+        </div>
+
+        <div id="sim-waybill-notice" class="bg-purple-950/30 border border-purple-800/40 rounded-xl p-3 text-purple-300">
+          <div class="font-semibold flex items-center gap-1.5">
+            <i data-lucide="truck" class="w-4 h-4"></i>
+            Trans Express Waybill Auto-Generation
+          </div>
+          <p class="text-[11px] text-zinc-400 mt-0.5">Website order will automatically book a courier waybill and place it in the Waybill Queue.</p>
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2 border-t border-zinc-800">
+          <button type="button" onclick="closeModal('simulate-modal')" class="px-4 py-2 rounded-xl text-zinc-400 hover:text-white">Cancel</button>
+          <button type="submit" class="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-5 py-2 rounded-xl transition-all">Submit Order</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Bulk GRN Generator -->
+  <div id="grn-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+        <h3 class="font-bold text-white flex items-center gap-2">
+          <i data-lucide="barcode" class="w-5 h-5 text-purple-400"></i>
+          Products & Multi-Barcode GRN Generator
+        </h3>
+        <button onclick="closeModal('grn-modal')" class="text-zinc-400 hover:text-white">✕</button>
+      </div>
+
+      <form id="form-grn" onsubmit="handleGenerateGRN(event)" class="space-y-4 text-xs">
+        <div>
+          <label class="block text-zinc-400 mb-1">Product Name</label>
+          <input type="text" id="grn-name" required value="WOWTEK 67W GaN Fast Charger" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-400 mb-1">SKU</label>
+            <input type="text" id="grn-sku" required value="WT-CHG-67W" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+          <div>
+            <label class="block text-zinc-400 mb-1">Quantity</label>
+            <input type="number" id="grn-qty" required value="5" min="1" max="50" onchange="renderSerialInputs(this.value)" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-zinc-400">Serial / Barcode Labels:</span>
+          <button type="button" onclick="autoGenerateSerials()" class="text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+            Auto-Generate Barcodes (WT-XXXXXX-N)
+          </button>
+        </div>
+
+        <div id="serial-container" class="max-h-48 overflow-y-auto space-y-2 p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+          <!-- Dynamically populated -->
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2 border-t border-zinc-800">
+          <button type="button" onclick="closeModal('grn-modal')" class="px-4 py-2 rounded-xl text-zinc-400 hover:text-white">Cancel</button>
+          <button type="submit" class="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-5 py-2 rounded-xl transition-all">Save Stock & Barcodes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Manual Invoice -->
+  <div id="invoice-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-2xl">
+      <div class="flex justify-between items-center border-b border-zinc-800 pb-3">
+        <h3 class="font-bold text-white flex items-center gap-2">
+          <i data-lucide="receipt" class="w-5 h-5 text-purple-400"></i>
+          Create Manual Walk-in Invoice
+        </h3>
+        <button onclick="closeModal('invoice-modal')" class="text-zinc-400 hover:text-white">✕</button>
+      </div>
+
+      <form id="form-invoice" onsubmit="handleManualInvoice(event)" class="space-y-4 text-xs">
+        <div>
+          <label class="block text-zinc-400 mb-1">Customer Name</label>
+          <input type="text" id="inv-name" required value="Saman Kumara" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-400 mb-1">Phone Number</label>
+            <input type="text" id="inv-phone" required value="0719876543" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+          <div>
+            <label class="block text-zinc-400 mb-1">Warranty Duration</label>
+            <select id="inv-warranty" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+              <option value="6">6 Months</option>
+              <option value="12">12 Months (1 Year)</option>
+              <option value="24">24 Months (2 Years)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-zinc-400 mb-1">Item Description</label>
+            <input type="text" id="inv-item" required value="Apple Watch Ultra Case" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+          <div>
+            <label class="block text-zinc-400 mb-1">Total Amount (Rs.)</label>
+            <input type="number" id="inv-amount" required value="3500" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-zinc-400 mb-1">Payment Method</label>
+          <select id="inv-payment" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+            <option value="Cash">Cash</option>
+            <option value="Card">Visa / Master (Card)</option>
+            <option value="Koko">Koko BNPL</option>
+          </select>
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2 border-t border-zinc-800">
+          <button type="button" onclick="closeModal('invoice-modal')" class="px-4 py-2 rounded-xl text-zinc-400 hover:text-white">Cancel</button>
+          <button type="submit" class="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-5 py-2 rounded-xl transition-all">Generate & Print</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
+  <script>
+    // State Store
+    const state = {
+      currentTab: 'orders',
+      orders: [],
+      invoices: [],
+      products: [],
+      barcodes: [],
+      warranties: [],
+      expenses: [],
+      selectedWaybills: []
+    };
+
+    function setTab(tab) {
+      state.currentTab = tab;
+      document.querySelectorAll('nav button').forEach(btn => {
+        btn.className = "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200";
+      });
+      const activeBtn = document.getElementById('nav-' + tab);
+      if (activeBtn) {
+        activeBtn.className = "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium bg-purple-600/15 text-purple-300 border border-purple-500/30";
+      }
+      renderView();
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+      if (id === 'grn-modal') renderSerialInputs(document.getElementById('grn-qty').value);
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function toggleWaybillNotice() {
+      const channel = document.getElementById('sim-channel').value;
+      const notice = document.getElementById('sim-waybill-notice');
+      if (channel === 'Website') {
+        notice.classList.remove('hidden');
+      } else {
+        notice.classList.add('hidden');
+      }
+    }
+
+    function renderSerialInputs(qty) {
+      const container = document.getElementById('serial-container');
+      container.innerHTML = '';
+      const num = parseInt(qty) || 1;
+      const prefix = 'WT-' + Math.floor(100000 + Math.random() * 900000);
+      for (let i = 0; i < num; i++) {
+        const div = document.createElement('div');
+        div.className = 'flex items-center space-x-2';
+        div.innerHTML = `
+          <span class="text-[10px] text-zinc-500 w-6">#${i + 1}</span>
+          <input type="text" name="serial" value="${prefix}-${i + 1}" class="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1.5 text-xs text-zinc-200 font-mono">
+        `;
+        container.appendChild(div);
+      }
+    }
+
+    function autoGenerateSerials() {
+      const inputs = document.querySelectorAll('input[name="serial"]');
+      const prefix = 'WT-' + Math.floor(100000 + Math.random() * 900000);
+      inputs.forEach((input, idx) => {
+        input.value = `${prefix}-${idx + 1}`;
+      });
+    }
+
+    function handleSimulateOrder(e) {
+      e.preventDefault();
+      const channel = document.getElementById('sim-channel').value;
+      const payment = document.getElementById('sim-payment').value;
+      const name = document.getElementById('sim-name').value;
+      const phone = document.getElementById('sim-phone').value;
+      const address = document.getElementById('sim-address').value;
+      const price = parseFloat(document.getElementById('sim-price').value);
+      const cost = parseFloat(document.getElementById('sim-cost').value);
+      const shipping = parseFloat(document.getElementById('sim-shipping').value);
+
+      // Payment commission calculation (12% for payment gateway / cards, or platform commission)
+      const commissionFee = payment !== 'Cash/COD' ? price * 0.12 : (channel !== 'Website' ? price * 0.18 : 0);
+      const netProfit = price - cost - commissionFee - (channel === 'Website' ? shipping : 0);
+
+      const orderNumber = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
+      const waybillNumber = channel === 'Website' ? 'TE-' + Math.floor(10000000 + Math.random() * 90000000) : 'No Waybill Required';
+
+      const newOrder = {
+        id: 'ord-' + Date.now(),
+        orderNumber,
+        channel,
+        customerName: name,
+        customerPhone: phone,
+        customerAddress: address,
+        price,
+        cost,
+        shipping,
+        commissionFee,
+        netProfit,
+        paymentMethod: payment,
+        waybillNumber,
+        courierStatus: channel === 'Website' ? 'Pending Dispatch' : 'N/A',
+        createdAt: new Date().toLocaleDateString()
+      };
+
+      state.orders.unshift(newOrder);
+
+      // Auto generate invoice
+      const invoiceNumber = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+      state.invoices.unshift({
+        id: 'inv-' + Date.now(),
+        invoiceNumber,
+        orderNumber,
+        customerName: name,
+        customerPhone: phone,
+        totalAmount: price,
+        paymentMethod: payment,
+        date: new Date().toLocaleDateString()
+      });
+
+      // Auto generate warranty
+      const expire = new Date();
+      expire.setMonth(expire.getMonth() + 12);
+      state.warranties.unshift({
+        id: 'wrn-' + Date.now(),
+        orderNumber,
+        customerName: name,
+        customerPhone: phone,
+        serialNumber: 'WT-SER-' + Math.floor(100000 + Math.random() * 900000),
+        expireDate: expire.toLocaleDateString(),
+        status: 'Active'
+      });
+
+      closeModal('simulate-modal');
+      updateBadges();
+      renderView();
+    }
+
+    function handleGenerateGRN(e) {
+      e.preventDefault();
+      const name = document.getElementById('grn-name').value;
+      const sku = document.getElementById('grn-sku').value;
+      const inputs = document.querySelectorAll('input[name="serial"]');
+      
+      inputs.forEach(input => {
+        state.barcodes.unshift({
+          id: 'bc-' + Math.random(),
+          productName: name,
+          sku,
+          serial: input.value,
+          isPrinted: false
+        });
+      });
+
+      closeModal('grn-modal');
+      alert(`Successfully generated ${inputs.length} barcodes for ${name}!`);
+      setTab('barcodes');
+    }
+
+    function handleManualInvoice(e) {
+      e.preventDefault();
+      const name = document.getElementById('inv-name').value;
+      const phone = document.getElementById('inv-phone').value;
+      const item = document.getElementById('inv-item').value;
+      const amount = parseFloat(document.getElementById('inv-amount').value);
+      const payment = document.getElementById('inv-payment').value;
+      const warranty = parseInt(document.getElementById('inv-warranty').value);
+
+      const invoiceNumber = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+      state.invoices.unshift({
+        id: 'inv-' + Date.now(),
+        invoiceNumber,
+        orderNumber: 'WALK-IN',
+        customerName: name,
+        customerPhone: phone,
+        totalAmount: amount,
+        paymentMethod: payment,
+        date: new Date().toLocaleDateString()
+      });
+
+      const expire = new Date();
+      expire.setMonth(expire.getMonth() + warranty);
+      state.warranties.unshift({
+        id: 'wrn-' + Date.now(),
+        orderNumber: invoiceNumber,
+        customerName: name,
+        customerPhone: phone,
+        serialNumber: 'WT-WALK-' + Math.floor(100000 + Math.random() * 900000),
+        expireDate: expire.toLocaleDateString(),
+        status: 'Active'
+      });
+
+      closeModal('invoice-modal');
+      updateBadges();
+      alert(`Manual Invoice ${invoiceNumber} created and printed!`);
+      setTab('invoices');
+    }
+
+    function updateBadges() {
+      document.getElementById('badge-orders').innerText = state.orders.length;
+      document.getElementById('badge-invoices').innerText = state.invoices.length;
+      const pendingWaybills = state.orders.filter(o => o.waybillNumber.startsWith('TE-') && o.courierStatus === 'Pending Dispatch').length;
+      document.getElementById('badge-waybills').innerText = pendingWaybills;
+    }
+
+    function toggleSelectWaybill(id) {
+      if (state.selectedWaybills.includes(id)) {
+        state.selectedWaybills = state.selectedWaybills.filter(x => x !== id);
+      } else {
+        state.selectedWaybills.push(id);
+      }
+      renderView();
+    }
+
+    function printSelectedWaybills() {
+      if (state.selectedWaybills.length === 0) {
+        alert('Please select at least one waybill to print.');
+        return;
+      }
+      window.print();
+      // Auto-update status to Dispatched
+      state.orders.forEach(o => {
+        if (state.selectedWaybills.includes(o.id)) {
+          o.courierStatus = 'Dispatched';
+        }
+      });
+      state.selectedWaybills = [];
+      updateBadges();
+      renderView();
+    }
+
+    function simulateExpirySMS(serial, phone) {
+      alert(`SMS Gateway Alert Dispatched to ${phone}:\n"Dear Customer, your WOWTEK warranty for product [${serial}] expires in 30 days. Contact WOWTEK hotline for renewal."`);
+    }
+
+    // Render View Content
+    function renderView() {
+      const container = document.getElementById('view-container');
+      const title = document.getElementById('tab-title');
+
+      if (state.currentTab === 'orders') {
+        title.innerText = 'Live Orders & Sync';
+        container.innerHTML = `
+          <div class="space-y-6">
+            <div class="grid grid-cols-4 gap-4">
+              <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <span class="text-xs text-zinc-500 uppercase font-semibold">Total Orders</span>
+                <div class="text-2xl font-bold text-white mt-1">${state.orders.length}</div>
+              </div>
+              <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <span class="text-xs text-zinc-500 uppercase font-semibold">Total Revenue</span>
+                <div class="text-2xl font-bold text-purple-400 mt-1">Rs. ${state.orders.reduce((a, b) => a + b.price, 0).toLocaleString()}</div>
+              </div>
+              <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <span class="text-xs text-zinc-500 uppercase font-semibold">Real Net Profit</span>
+                <div class="text-2xl font-bold text-emerald-400 mt-1">Rs. ${state.orders.reduce((a, b) => a + b.netProfit, 0).toLocaleString()}</div>
+              </div>
+              <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <span class="text-xs text-zinc-500 uppercase font-semibold">Waybills in Queue</span>
+                <div class="text-2xl font-bold text-amber-400 mt-1">${state.orders.filter(o => o.waybillNumber.startsWith('TE-') && o.courierStatus === 'Pending Dispatch').length}</div>
+              </div>
+            </div>
+
+            <div class="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+              <table class="w-full text-left text-xs text-zinc-300">
+                <thead class="bg-zinc-900 text-zinc-400 uppercase tracking-wider font-semibold border-b border-zinc-800">
+                  <tr>
+                    <th class="p-3.5">Order No</th>
+                    <th class="p-3.5">Channel</th>
+                    <th class="p-3.5">Customer</th>
+                    <th class="p-3.5">Price & Net Profit</th>
+                    <th class="p-3.5">Payment (12% Ded.)</th>
+                    <th class="p-3.5">Trans Express Waybill</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-800/60">
+                  ${state.orders.length === 0 ? '<tr><td colspan="6" class="p-8 text-center text-zinc-500">No orders yet. Click "Simulate Incoming Order" above to begin.</td></tr>' : ''}
+                  ${state.orders.map(o => `
+                    <tr class="hover:bg-zinc-900/50">
+                      <td class="p-3.5 font-mono font-bold text-white">${o.orderNumber}</td>
+                      <td class="p-3.5">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${o.channel === 'Website' ? 'bg-purple-900/40 text-purple-300 border border-purple-700/50' : (o.channel === 'PickMe' ? 'bg-amber-900/40 text-amber-300 border border-amber-700/50' : 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/50')}">
+                          ${o.channel}
+                        </span>
+                      </td>
+                      <td class="p-3.5">
+                        <div class="font-semibold text-white">${o.customerName}</div>
+                        <div class="text-[10px] text-zinc-500">${o.customerPhone}</div>
+                      </td>
+                      <td class="p-3.5">
+                        <div class="font-bold text-white">Rs. ${o.price.toLocaleString()}</div>
+                        <div class="text-[10px] text-emerald-400">Net Profit: Rs. ${Math.round(o.netProfit).toLocaleString()}</div>
+                      </td>
+                      <td class="p-3.5">
+                        <div>${o.paymentMethod}</div>
+                        <div class="text-[10px] text-zinc-500">Fee: Rs. ${Math.round(o.commissionFee)}</div>
+                      </td>
+                      <td class="p-3.5">
+                        ${o.waybillNumber.startsWith('TE-') ? `
+                          <span class="font-mono text-purple-400 font-bold bg-purple-950 px-2 py-0.5 rounded border border-purple-800">${o.waybillNumber}</span>
+                          <span class="block text-[10px] text-amber-400 mt-0.5">${o.courierStatus}</span>
+                        ` : `
+                          <span class="text-zinc-500">No Waybill Required</span>
+                        `}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (state.currentTab === 'invoices') {
+        title.innerText = 'Invoices & Billing';
+        container.innerHTML = `
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <p class="text-xs text-zinc-400">Automatically and manually generated invoices</p>
+              <button onclick="window.print()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold px-4 py-2 rounded-xl flex items-center gap-1.5">
+                <i data-lucide="printer" class="w-4 h-4"></i> Print Invoices List
+              </button>
+            </div>
+
+            <div class="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+              <table class="w-full text-left text-xs text-zinc-300">
+                <thead class="bg-zinc-900 text-zinc-400 uppercase tracking-wider font-semibold border-b border-zinc-800">
+                  <tr>
+                    <th class="p-3.5">Invoice No</th>
+                    <th class="p-3.5">Order Ref</th>
+                    <th class="p-3.5">Customer</th>
+                    <th class="p-3.5">Amount</th>
+                    <th class="p-3.5">Payment</th>
+                    <th class="p-3.5">Date</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-800/60">
+                  ${state.invoices.length === 0 ? '<tr><td colspan="6" class="p-8 text-center text-zinc-500">No invoices generated yet.</td></tr>' : ''}
+                  ${state.invoices.map(i => `
+                    <tr class="hover:bg-zinc-900/50">
+                      <td class="p-3.5 font-mono font-bold text-purple-400">${i.invoiceNumber}</td>
+                      <td class="p-3.5 font-mono">${i.orderNumber}</td>
+                      <td class="p-3.5">
+                        <div class="font-semibold text-white">${i.customerName}</div>
+                        <div class="text-[10px] text-zinc-500">${i.customerPhone}</div>
+                      </td>
+                      <td class="p-3.5 font-bold text-white">Rs. ${i.totalAmount.toLocaleString()}</td>
+                      <td class="p-3.5">${i.paymentMethod}</td>
+                      <td class="p-3.5 text-zinc-500">${i.date}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (state.currentTab === 'waybills') {
+        title.innerText = 'Trans Express Waybill Queue';
+        const waybills = state.orders.filter(o => o.waybillNumber.startsWith('TE-'));
+        container.innerHTML = `
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <div>
+                <p class="text-xs text-zinc-400">Website orders ready for Trans Express logistics pickup</p>
+              </div>
+              <button onclick="printSelectedWaybills()" class="bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-lg shadow-purple-600/30 flex items-center gap-2">
+                <i data-lucide="printer" class="w-4 h-4"></i>
+                Print Selected Labels (${state.selectedWaybills.length}) & Mark Dispatched
+              </button>
+            </div>
+
+            <div class="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+              <table class="w-full text-left text-xs text-zinc-300">
+                <thead class="bg-zinc-900 text-zinc-400 uppercase tracking-wider font-semibold border-b border-zinc-800">
+                  <tr>
+                    <th class="p-3.5 w-10 text-center">Select</th>
+                    <th class="p-3.5">Waybill No</th>
+                    <th class="p-3.5">Order Ref</th>
+                    <th class="p-3.5">Recipient & Address</th>
+                    <th class="p-3.5">COD Amount</th>
+                    <th class="p-3.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-800/60">
+                  ${waybills.length === 0 ? '<tr><td colspan="6" class="p-8 text-center text-zinc-500">No pending waybills in queue. Simulate a Website order to generate one.</td></tr>' : ''}
+                  ${waybills.map(w => `
+                    <tr class="hover:bg-zinc-900/50 cursor-pointer" onclick="toggleSelectWaybill('${w.id}')">
+                      <td class="p-3.5 text-center">
+                        <input type="checkbox" ${state.selectedWaybills.includes(w.id) ? 'checked' : ''} class="rounded border-zinc-700 text-purple-600">
+                      </td>
+                      <td class="p-3.5 font-mono font-bold text-purple-400">${w.waybillNumber}</td>
+                      <td class="p-3.5 font-mono">${w.orderNumber}</td>
+                      <td class="p-3.5">
+                        <div class="font-semibold text-white">${w.customerName} (${w.customerPhone})</div>
+                        <div class="text-[10px] text-zinc-500">${w.customerAddress}</div>
+                      </td>
+                      <td class="p-3.5 font-bold text-emerald-400">Rs. ${w.price.toLocaleString()}</td>
+                      <td class="p-3.5">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold ${w.courierStatus === 'Dispatched' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/50' : 'bg-amber-900/40 text-amber-300 border border-amber-700/50'}">
+                          ${w.courierStatus}
+                        </span>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (state.currentTab === 'products') {
+        title.innerText = 'Products & Bulk GRN';
+        container.innerHTML = `
+          <div class="space-y-4">
+            <div class="flex justify-between items-center">
+              <p class="text-xs text-zinc-400">Barcode stock label inventory</p>
+              <button onclick="openModal('grn-modal')" class="bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5">
+                <i data-lucide="plus" class="w-4 h-4"></i> Add GRN Batch
+              </button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-4">
+              ${state.barcodes.length === 0 ? '<div class="col-span-3 text-center py-12 text-zinc-500">No stock barcodes generated yet. Click "Add GRN Batch" to generate serial labels.</div>' : ''}
+              ${state.barcodes.map(b => `
+                <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between space-y-3">
+                  <div>
+                    <span class="text-[10px] font-mono text-purple-400 font-semibold">${b.sku}</span>
+                    <h4 class="font-bold text-sm text-white">${b.productName}</h4>
+                  </div>
+                  <div class="bg-white text-zinc-900 p-3 rounded-lg text-center font-mono">
+                    <div class="text-[9px] uppercase tracking-wider text-zinc-500 font-bold">WOWTEK PVT LTD</div>
+                    <div class="text-xl font-bold tracking-[0.2em] my-1">||| | |||| || |||</div>
+                    <div class="text-xs font-bold text-purple-700">${b.serial}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else if (state.currentTab === 'warranties') {
+        title.innerText = 'Warranty Tracker & Customer Claims';
+        container.innerHTML = `
+          <div class="space-y-4">
+            <p class="text-xs text-zinc-400">Customer warranties and automated 30-day expiry notifications</p>
+            <div class="bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden">
+              <table class="w-full text-left text-xs text-zinc-300">
+                <thead class="bg-zinc-900 text-zinc-400 uppercase tracking-wider font-semibold border-b border-zinc-800">
+                  <tr>
+                    <th class="p-3.5">Order/Invoice</th>
+                    <th class="p-3.5">Customer</th>
+                    <th class="p-3.5">Serial No</th>
+                    <th class="p-3.5">Expiry Date</th>
+                    <th class="p-3.5">Status</th>
+                    <th class="p-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-zinc-800/60">
+                  ${state.warranties.length === 0 ? '<tr><td colspan="6" class="p-8 text-center text-zinc-500">No warranty records logged yet.</td></tr>' : ''}
+                  ${state.warranties.map(w => `
+                    <tr class="hover:bg-zinc-900/50">
+                      <td class="p-3.5 font-mono font-bold text-white">${w.orderNumber}</td>
+                      <td class="p-3.5">
+                        <div class="font-semibold text-white">${w.customerName}</div>
+                        <div class="text-[10px] text-zinc-500">${w.customerPhone}</div>
+                      </td>
+                      <td class="p-3.5 font-mono text-purple-400">${w.serialNumber}</td>
+                      <td class="p-3.5 font-semibold text-zinc-300">${w.expireDate}</td>
+                      <td class="p-3.5">
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-900/40 text-emerald-300 border border-emerald-700/50">
+                          ${w.status}
+                        </span>
+                      </td>
+                      <td class="p-3.5 text-right">
+                        <button onclick="simulateExpirySMS('${w.serialNumber}', '${w.customerPhone}')" class="bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white px-3 py-1 rounded-lg text-xs font-medium border border-purple-500/30 transition-colors">
+                          Send 30-Day Expiry SMS
+                        </button>
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } else if (state.currentTab === 'expenses') {
+        title.innerText = 'Expenses & Financial Profit Breakdown';
+        const totalSales = state.orders.reduce((a, b) => a + b.price, 0);
+        const totalCosts = state.orders.reduce((a, b) => a + b.cost, 0);
+        const totalComm = state.orders.reduce((a, b) => a + b.commissionFee, 0);
+        const totalShip = state.orders.reduce((a, b) => a + (b.channel === 'Website' ? b.shipping : 0), 0);
+        const netProfit = totalSales - totalCosts - totalComm - totalShip;
+
+        container.innerHTML = `
+          <div class="space-y-6">
+            <div class="bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-950 border border-purple-500/30 rounded-2xl p-6">
+              <h3 class="font-bold text-white text-base mb-1">Live Net Profit Formula</h3>
+              <p class="text-xs text-zinc-400 font-mono">Real Net Profit = Selling Price - Item Cost - Platform/Payment Commission (12%) - Shipping Fee</p>
+            </div>
+
+            <div class="grid grid-cols-4 gap-4">
+              <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <span class="text-xs text-zinc-500 uppercase font-semibold">Gross Selling Price</span>
+                <div class="text-xl font-bold text-white mt-1">Rs. ${totalSales.toLocaleString()}</div>
+              </div>
+              <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <span class="text-xs text-zinc-500 uppercase font-semibold">Total Item Cost</span>
+                <div class="text-xl font-bold text-zinc-400 mt-1">Rs. ${totalCosts.toLocaleString()}</div>
+              </div>
+              <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <span class="text-xs text-zinc-500 uppercase font-semibold">12% Payment / Comm.</span>
+                <div class="text-xl font-bold text-amber-400 mt-1">Rs. ${Math.round(totalComm).toLocaleString()}</div>
+              </div>
+              <div class="bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
+                <span class="text-xs text-zinc-500 uppercase font-semibold">Total Real Net Profit</span>
+                <div class="text-2xl font-black text-emerald-400 mt-1">Rs. ${Math.round(netProfit).toLocaleString()}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (state.currentTab === 'settings') {
+        title.innerText = 'API & SMS Gateway Settings';
+        container.innerHTML = `
+          <div class="grid grid-cols-2 gap-6">
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+              <h4 class="font-bold text-white text-sm flex items-center gap-2">
+                <i data-lucide="radio" class="w-4 h-4 text-purple-400"></i>
+                Channel API Credentials
+              </h4>
+              <div class="space-y-3 text-xs">
+                <div>
+                  <label class="block text-zinc-400 mb-1">WooCommerce API Key / Secret</label>
+                  <input type="text" value="ck_live_wowtek_99210" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-300 font-mono">
+                </div>
+                <div>
+                  <label class="block text-zinc-400 mb-1">PickMe Merchant API Token</label>
+                  <input type="text" value="pm_tok_live_7721" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-300 font-mono">
+                </div>
+                <div>
+                  <label class="block text-zinc-400 mb-1">Trans Express API Base URL</label>
+                  <input type="text" value="https://api.transexpress.lk/v1" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-300 font-mono">
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+              <h4 class="font-bold text-white text-sm flex items-center gap-2">
+                <i data-lucide="message-square" class="w-4 h-4 text-purple-400"></i>
+                SMS Gateway (SMSlenz / Dialog / Mobitel)
+              </h4>
+              <div class="space-y-3 text-xs">
+                <div>
+                  <label class="block text-zinc-400 mb-1">SMS Provider</label>
+                  <select class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-200">
+                    <option>SMSlenz LK</option>
+                    <option>Dialog Axiata Direct</option>
+                    <option>Mobitel mBiz</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-zinc-400 mb-1">Sender Masking ID</label>
+                  <input type="text" value="WOWTEK" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-zinc-300 font-mono">
+                </div>
+                <button onclick="alert('Test SMS sent successfully! Provider balance: 4,820 SMS units remaining.')" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-2.5 rounded-xl transition-all">
+                  Test SMS Gateway Dispatch
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      lucide.createIcons();
+    }
+
+    // Initialize View
+    renderView();
+    updateBadges();
+  </script>
+</body>
+</html>
